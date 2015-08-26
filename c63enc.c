@@ -17,7 +17,7 @@
 static char *output_file, *input_file;
 FILE *outfile;
 
-static int limit_numframes = 0;
+static int limit_numframes = 30;
 
 static uint32_t width;
 static uint32_t height;
@@ -25,6 +25,13 @@ static uint32_t height;
 /* getopt */
 extern int optind;
 extern char *optarg;
+
+// Get CPU cycle count
+uint64_t rdtsc(){
+    unsigned int lo,hi;
+    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    return ((uint64_t)hi << 32) | lo;
+}
 
 /* Read planar YUV frames with 4:2:0 chroma sub-sampling */
 static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
@@ -244,6 +251,7 @@ int main(int argc, char **argv)
 
   /* Encode input frames */
   int numframes = 0;
+  uint64_t cycleCountBefore, cycleCountAfter;
 
   while (1)
   {
@@ -252,14 +260,17 @@ int main(int argc, char **argv)
     if (!image) { break; }
 
     printf("Encoding frame %d, ", numframes);
+
+    cycleCountBefore = rdtsc();
     c63_encode_image(cm, image);
+    cycleCountAfter = rdtsc();
 
     free(image->Y);
     free(image->U);
     free(image->V);
     free(image);
 
-    printf("Done!\n");
+    printf("Done in %d kilocycles!\n", (cycleCountAfter - cycleCountBefore)/1000);
 
     ++numframes;
 
