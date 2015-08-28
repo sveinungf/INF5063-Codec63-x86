@@ -30,7 +30,7 @@ vlc-reference:
 	vlc --rawvid-width 352 --rawvid-height 288 --rawvid-chroma I420 yuv/reference.yuv
 
 gprof:
-	gprof c63enc gmon.out
+	gprof c63enc gmon.out -b
 gprof-file:
 	gprof c63enc gmon.out > temp/gprof-result.txt
 
