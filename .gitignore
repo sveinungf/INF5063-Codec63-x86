@@ -5,5 +5,4 @@ c63pred
 *.o
 
 # data files
-*.yuv
 *.c63
