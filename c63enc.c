@@ -270,7 +270,7 @@ int main(int argc, char **argv)
     free(image->V);
     free(image);
 
-    printf("Done in %d kilocycles!\n", (cycleCountAfter - cycleCountBefore)/1000);
+    printf("Done in %" PRIu64 "k cycles!\n", (cycleCountAfter - cycleCountBefore)/1000);
 
     ++numframes;
 

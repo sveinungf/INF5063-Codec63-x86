@@ -15,7 +15,7 @@ c63pred: c63dec.c dsp.o tables.o io.o c63.h common.o me.o
 	$(CC) $^ -DC63_PRED $(CFLAGS) $(LDFLAGS) -o $@
 
 clean:
-	rm -f *.o c63enc c63dec c63pred
+	rm -f *.o c63enc #c63dec c63pred
 
 encode: c63enc
 	./c63enc -w 352 -h 288 -o temp/test.c63 yuv/foreman.yuv
