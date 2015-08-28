@@ -5,6 +5,8 @@
 #include "dsp.h"
 #include "tables.h"
 
+#include <immintrin.h>
+
 static void transpose_block(float *in_data, float *out_data)
 {
   int i, j;
@@ -38,16 +40,41 @@ static void dct_1d(float *in_data, float *out_data)
 static void idct_1d(float *in_data, float *out_data)
 {
   int i, j;
+  
+  __m256 va;
+  __m256 vb;
+  __m256 vc[8];
 
   for (i = 0; i < 8; ++i)
   {
     float idct = 0;
 
-    for (j = 0; j < 8; ++j)
+    /*for (j = 0; j < 8; ++j)
     {
       idct += in_data[j] * dctlookup[i][j];
+    }*/
+    
+    for (j = 0; j < 8; j+=4)
+    {
+        idct += in_data[j] * dctlookup[i][j];
+        idct += in_data[j+1] * dctlookup[i][j+1];
+        idct += in_data[j+2] * dctlookup[i][j+2];
+        idct += in_data[j+3] * dctlookup[i][j+3];
     }
-
+    /*
+    va = _mm256_loadu_ps(in_data);
+    vb = _mm256_loadu_ps(dctlookup[i]);
+    vc[i] = _mm256_mul_ps(va, vb);
+    
+    for(j = 0; j < 8; j+=4)
+    {
+        idct += ((float*)&vc)[j];
+        idct += ((float*)&vc)[j+1];
+        idct += ((float*)&vc)[j+2];
+        idct += ((float*)&vc)[j+3];
+    }
+    */
+        
     out_data[i] = idct;
   }
 }
@@ -148,15 +175,41 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
 
 void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result)
 {
-  int u, v;
+    int v, temp_stride;
 
-  *result = 0;
+    *result = 0;
+       
+    __m128i va = _mm_setzero_si128();
+    __m128i vb = _mm_setzero_si128();
+    __m128i vc[8];
+    
 
-  for (v = 0; v < 8; ++v)
-  {
-    for (u = 0; u < 8; ++u)
+    for (v = 0; v < 8; ++v)
     {
-      *result += abs(block2[v*stride+u] - block1[v*stride+u]);
+        temp_stride = v*stride;  
+    
+        /*
+         * result += abs(block2[v*stride+u] - block1[v*stride+u]);
+        
+        va = _mm_loadu_ps((const float*)&block2[temp_stride]);
+        vb = _mm_loadu_ps((const float*)&block1[temp_stride]);
+        vc[i++] = _mm_sub_ps(va, vb);
+        
+        va = _mm_loadu_ps((const float*)&block2[temp_stride + 4]);
+        vb = _mm_loadu_ps((const float*)&block1[temp_stride + 4]);
+        vc[i++] = _mm_sub_ps(va, vb);
+        * 
+        */
+        
+        va = _mm_loadu_si128((void const*)&block2[temp_stride]); 
+        vb = _mm_loadu_si128((void const*)&block1[temp_stride]); 
+        vc[v] = _mm_sad_epu8(va, vb);
     }
-  }
+        
+    for(v = 0; v < 8; v+=4) {
+        *result += _mm_cvtsi128_si32(vc[v]);
+        *result += _mm_cvtsi128_si32(vc[v+1]);
+        *result += _mm_cvtsi128_si32(vc[v+2]);
+        *result += _mm_cvtsi128_si32(vc[v+3]);
+    }
 }
