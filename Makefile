@@ -29,6 +29,11 @@ vlc-original:
 vlc-reference:
 	vlc --rawvid-width 352 --rawvid-height 288 --rawvid-chroma I420 yuv/reference.yuv
 
+gprof:
+	gprof c63enc gmon.out
+gprof-file:
+	gprof c63enc gmon.out > temp/gprof-result.txt
+
 psnr:
 	./tools/yuv-tools/ycbcr.py psnr yuv/foreman.yuv 352 288 IYUV yuv/test.yuv
 psnr-reference:

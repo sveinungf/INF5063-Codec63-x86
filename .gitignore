@@ -6,3 +6,4 @@ c63pred
 
 # data files
 *.c63
+/gmon.out
