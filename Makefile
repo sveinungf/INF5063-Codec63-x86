@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O3 -Wall -g -pg
+CFLAGS = -mavx -O3 -Wall -g -pg
 LDFLAGS = -lm
 
 all: c63enc #c63dec c63pred
