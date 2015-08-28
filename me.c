@@ -38,29 +38,78 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   if (right > (w - 8)) { right = w - 8; }
   if (bottom > (h - 8)) { bottom = h - 8; }
 
-  int x, y;
-
   int mx = mb_x * 8;
   int my = mb_y * 8;
 
-  int best_sad = INT_MAX;
+  int xPattern[8] = {2, 1, 0, -1, -2, -1,  0,  1};
+  int yPattern[8] = {0, 1, 2,  1,  0, -1, -2, -1};
+  int xSmallPattern[4] = {1, 0, -1,  0};
+  int ySmallPattern[4] = {0, 1,  0, -1};
 
-  for (y = top; y < bottom; ++y)
-  {
-    for (x = left; x < right; ++x)
-    {
-      int sad;
-      sad_block_8x8(orig + my*w+mx, ref + y*w+x, w, &sad);
+  int origX = left + (right - left)/2;
+  int origY = top + (bottom - top)/2;
 
-      /* printf("(%4d,%4d) - %d\n", x, y, sad); */
+  uint8_t* origBlock = orig + my*w + mx;
 
-      if (sad < best_sad)
-      {
-        mb->mv_x = x - mx;
-        mb->mv_y = y - my;
-        best_sad = sad;
-      }
-    }
+  int x = origX;
+  int y = origY;
+  int best_sad;
+  sad_block_8x8(origBlock, ref + y*w+x, w, &best_sad);
+  mb->mv_x = x - mx;
+  mb->mv_y = y - my;
+
+  int done = 0;
+
+  while (!done) {
+	  	int bestIndex = -1;
+		int i;
+		for (i = 0; i < 8; ++i)
+		{
+		  x = origX + xPattern[i];
+		  y = origY + yPattern[i];
+
+		  if (x > right || y > bottom) {
+			  continue;
+		  }
+
+		  int sad;
+		  sad_block_8x8(origBlock, ref + y*w+x, w, &sad);
+
+		  if (sad < best_sad)
+		  {
+			  mb->mv_x = x - mx;
+			  mb->mv_y = y - my;
+			  best_sad = sad;
+			  bestIndex = i;
+		  }
+		}
+
+		if (bestIndex == -1) {
+		  for (i = 0; i < 4; ++i) {
+			  x = origX + xSmallPattern[i];
+			  y = origY + ySmallPattern[i];
+
+			  if (x > right || y > bottom) {
+				  continue;
+			  }
+
+			  int sad;
+			  sad_block_8x8(origBlock, ref + y*w+x, w, &sad);
+
+			  if (sad < best_sad)
+			  {
+				  mb->mv_x = x - mx;
+				  mb->mv_y = y - my;
+				  best_sad = sad;
+				  bestIndex = i;
+			  }
+		  }
+
+		  done = 1;
+		} else {
+		  origX += xPattern[bestIndex];
+		  origY += yPattern[bestIndex];
+		}
   }
 
   /* Here, there should be a threshold on SAD that checks if the motion vector
