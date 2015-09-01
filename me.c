@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <immintrin.h>
 
 #include "dsp.h"
 #include "me.h"
@@ -38,28 +39,40 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   if (right > (w - 8)) { right = w - 8; }
   if (bottom > (h - 8)) { bottom = h - 8; }
 
-  int x, y;
+  int x, y, block_row;
 
   int mx = mb_x * 8;
   int my = mb_y * 8;
 
   int best_sad = INT_MAX;
+  uint8_t* orig_block = orig + my*w+mx;
 
   for (y = top; y < bottom; ++y)
   {
-    for (x = left; x < right; ++x)
+    for (x = left; x < right; x+=8)
     {
-      int sad;
-      sad_block_8x8(orig + my*w+mx, ref + y*w+x, w, &sad);
+    	__m128i row_sads_left = _mm_setzero_si128();
+		__m128i row_sads_right = _mm_setzero_si128();
 
-      /* printf("(%4d,%4d) - %d\n", x, y, sad); */
+		for (block_row = 0; block_row < 8; ++block_row)
+		{
+			__m128i ref_pixels = _mm_loadu_si128((void const*)(ref + y*w+x+(block_row*w)));
+			__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_block + (block_row*w)));
 
-      if (sad < best_sad)
-      {
-        mb->mv_x = x - mx;
-        mb->mv_y = y - my;
-        best_sad = sad;
-      }
+			row_sads_left = _mm_add_epi16(row_sads_left, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0));
+			row_sads_right = _mm_add_epi16(row_sads_right, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 5));
+		}
+
+		__m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_left, row_sads_right));
+		int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
+
+		if (sad_min < best_sad)
+		{
+			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
+			mb->mv_x = (x + sad_index) - mx;
+			mb->mv_y = y - my;
+			best_sad = sad_min;
+		}
     }
   }
 

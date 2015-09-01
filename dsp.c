@@ -40,10 +40,6 @@ static void dct_1d(float *in_data, float *out_data)
 static void idct_1d(float *in_data, float *out_data)
 {
   int i, j;
-  
-  __m256 va;
-  __m256 vb;
-  __m256 vc[8];
 
   for (i = 0; i < 8; ++i)
   {
@@ -171,45 +167,4 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
   transpose_block(mb2, mb);
 
   for (i = 0; i < 64; ++i) { out_data[i] = mb[i]; }
-}
-
-void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result)
-{
-    int v, temp_stride;
-
-    *result = 0;
-       
-    __m128i va = _mm_setzero_si128();
-    __m128i vb = _mm_setzero_si128();
-    __m128i vc[8];
-    
-
-    for (v = 0; v < 8; ++v)
-    {
-        temp_stride = v*stride;  
-    
-        /*
-         * result += abs(block2[v*stride+u] - block1[v*stride+u]);
-        
-        va = _mm_loadu_ps((const float*)&block2[temp_stride]);
-        vb = _mm_loadu_ps((const float*)&block1[temp_stride]);
-        vc[i++] = _mm_sub_ps(va, vb);
-        
-        va = _mm_loadu_ps((const float*)&block2[temp_stride + 4]);
-        vb = _mm_loadu_ps((const float*)&block1[temp_stride + 4]);
-        vc[i++] = _mm_sub_ps(va, vb);
-        * 
-        */
-        
-        va = _mm_loadu_si128((void const*)&block2[temp_stride]); 
-        vb = _mm_loadu_si128((void const*)&block1[temp_stride]); 
-        vc[v] = _mm_sad_epu8(va, vb);
-    }
-        
-    for(v = 0; v < 8; v+=4) {
-        *result += _mm_cvtsi128_si32(vc[v]);
-        *result += _mm_cvtsi128_si32(vc[v+1]);
-        *result += _mm_cvtsi128_si32(vc[v+2]);
-        *result += _mm_cvtsi128_si32(vc[v+3]);
-    }
 }

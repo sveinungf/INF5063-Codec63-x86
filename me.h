@@ -2,6 +2,7 @@
 #define C63_ME_H_
 
 #include "c63.h"
+#include "printer.h"
 
 // Declaration
 void c63_motion_estimate(struct c63_common *cm);
