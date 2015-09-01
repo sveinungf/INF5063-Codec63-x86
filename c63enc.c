@@ -252,6 +252,7 @@ int main(int argc, char **argv)
   /* Encode input frames */
   int numframes = 0;
   uint64_t cycleCountBefore, cycleCountAfter;
+  uint64_t kCycleCountTotal = 0;
 
   while (1)
   {
@@ -270,12 +271,17 @@ int main(int argc, char **argv)
     free(image->V);
     free(image);
 
-    printf("Done in %" PRIu64 "k cycles!\n", (cycleCountAfter - cycleCountBefore)/1000);
+    uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
+    kCycleCountTotal += kCycleCount;
+    printf("Done in %" PRIu64 "k cycles!\n", kCycleCount);
 
     ++numframes;
 
     if (limit_numframes && numframes >= limit_numframes) { break; }
   }
+
+  printf("-----------\n");
+  printf("Average CPU cycle count per frame: %" PRIu64 "\n", kCycleCountTotal/numframes);
 
   fclose(outfile);
   fclose(infile);
