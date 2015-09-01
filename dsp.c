@@ -10,6 +10,8 @@
 static void transpose_block(float *in_data, float *out_data)
 {
   int i, j;
+  
+  __m256 va;
 
   for (i = 0; i < 8; ++i)
   {
@@ -17,6 +19,10 @@ static void transpose_block(float *in_data, float *out_data)
     {
       out_data[i*8+j] = in_data[j*8+i];
     }
+    
+    //va = _mm256_loadu_ps(in_data[i*8]);
+    //void _mm256_mask_store_ps (void* mem_addr, __mmask8 k, __m256 a)
+
   }
 }
 
@@ -28,9 +34,17 @@ static void dct_1d(float *in_data, float *out_data)
   {
     float dct = 0;
 
-    for (j = 0; j < 8; ++j)
+    /*for (j = 0; j < 8; ++j)
     {
       dct += in_data[j] * dctlookup[j][i];
+    } */
+    
+    for (j = 0; j < 8; j+=4)
+    {
+        dct += in_data[j] * dctlookup[j][i];
+        dct += in_data[j+1] * dctlookup[j+1][i];
+        dct += in_data[j+2] * dctlookup[j+2][i];
+        dct += in_data[j+3] * dctlookup[j+3][i];
     }
 
     out_data[i] = dct;
@@ -62,6 +76,7 @@ static void idct_1d(float *in_data, float *out_data)
     vb = _mm256_loadu_ps(dctlookup[i]);
     vc[i] = _mm256_mul_ps(va, vb);
     
+        
     for(j = 0; j < 8; j+=4)
     {
         idct += ((float*)&vc)[j];
