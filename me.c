@@ -18,7 +18,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 {
   int someValue = mb_y*cm->padw[color_component]/8 + mb_x;
   struct macroblock *left_mb = &cm->curframe->mbs[color_component][someValue];
-  struct macroblock *right_mb = &cm->curframe->mbs[color_component][someValue + 1];
+  //struct macroblock *right_mb = &cm->curframe->mbs[color_component][someValue + 1];
 
   int range = cm->me_search_range;
 
@@ -46,114 +46,99 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int my = mb_y * 8;
 
   int best_sad_left = INT_MAX;
-  int best_sad_right = INT_MAX;
+  //int best_sad_right = INT_MAX;
+
+  int leftIter;
+  //int rightIter;
+  __m128i row_sads_left1[5]; // 3 for chroma?
+  __m128i row_sads_left2[5];
+  //__m128i row_sads_right1[5];
+  //__m128i row_sads_right2[5];
 
   for (y = top; y < bottom; ++y)
   {
-    __m128i row_sads_left1 = _mm_setzero_si128();
-	__m128i row_sads_left2 = _mm_setzero_si128();
+	  int q;
+	    for (q = 0; q < 5; ++q)
+	    {
+	  	  row_sads_left1[q] = _mm_setzero_si128();
+	  	  row_sads_left2[q] = _mm_setzero_si128();
+	  	  //row_sads_right1[q] = _mm_setzero_si128();
+	  	  //row_sads_right2[q] = _mm_setzero_si128();
+	    }
 
-	x = left;
+	  for (block_row = 0; block_row < 8; ++block_row)
+	  {
+		  __m128i orig_pixels = _mm_loadu_si128((void const*)(orig + mx + w*(block_row + my)));
 
-	if ((mb_x * 8 - left) == range)
-	{
-		for (block_row = 0; block_row < 8; ++block_row)
-		{
-			__m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
-			__m128i orig_pixels = _mm_loadu_si128((void const*)(orig + mx + w*(block_row + my)));
+		  x = left;
+		  leftIter = 0;
+		  //rightIter = 0;
+		  /*
+		  if ((mb_x * 8 - left) == range)
+		  {
+			  __m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
 
-			// Left block
-			row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
-			row_sads_left2 = _mm_add_epi16(row_sads_left2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101));
-		}
+			  // TODO: remove add?
+			  row_sads_left1[0] = _mm_add_epi16(row_sads_left1[0], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
+			  row_sads_left2[0] = _mm_add_epi16(row_sads_left2[0], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101));
 
-		__m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1, row_sads_left2));
-		int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
+			  x += 8;
+			  ++leftIter;
+		  }
+			*/
+		  for (; x < right; x+=8)
+		  {
+			  __m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
 
-		if (sad_min < best_sad_left)
-		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
-			left_mb->mv_x = (x + sad_index) - mx;
-			left_mb->mv_y = y - my;
-			best_sad_left = sad_min;
-		}
+			  row_sads_left1[leftIter] = _mm_add_epi16(row_sads_left1[leftIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
+			  row_sads_left2[leftIter] = _mm_add_epi16(row_sads_left2[leftIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101));
 
-		x += 8;
-	}
+			  //row_sads_right1[rightIter] = _mm_add_epi16(row_sads_right1[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
+			  //row_sads_right2[rightIter] = _mm_add_epi16(row_sads_right2[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
 
-	__m128i row_sads_right1;
-	__m128i row_sads_right2;
+			  ++leftIter;
+			  //++rightIter;
+		  }
+		  /*
+		  if ((w >= right + 16))
+		  {
+			  __m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
 
-    for (; x < right; x+=8)
-    {
-    	row_sads_left1 = _mm_setzero_si128();
-    	row_sads_left2 = _mm_setzero_si128();
-    	__m128i row_sads_right1 = _mm_setzero_si128();
-    	__m128i row_sads_right2 = _mm_setzero_si128();
+			  // TODO: Index 0?
+			  row_sads_right1[rightIter] = _mm_add_epi16(row_sads_right1[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
+			  row_sads_right2[rightIter] = _mm_add_epi16(row_sads_right2[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
+		  }
+		  */
+	  }
 
-		for (block_row = 0; block_row < 8; ++block_row)
-		{
-			__m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
-			__m128i orig_pixels = _mm_loadu_si128((void const*)(orig + mx + w*(block_row + my)));
+	  int i;
+	  for (i = 0; i < leftIter; ++i)
+	  {
+		  __m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1[i], row_sads_left2[i]));
+		  int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
 
-			// Left block
-			row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
-			row_sads_left2 = _mm_add_epi16(row_sads_left2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101));
+		  if (sad_min < best_sad_left)
+		  {
+			  int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
+			  left_mb->mv_x = (left + i*8 + sad_index) - mx;
+			  left_mb->mv_y = y - my;
+			  best_sad_left = sad_min;
+		  }
+	  }
 
-			// Right block
-			row_sads_right1 = _mm_add_epi16(row_sads_right1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
-			row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
-		}
+	  /*for (i = 0; i < rightIter; ++i)
+	  {
+		  __m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1[i], row_sads_right2[i]));
+		  int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
 
-		__m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1, row_sads_left2));
-		int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
-
-		if (sad_min < best_sad_left)
-		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
-			left_mb->mv_x = (x + sad_index) - mx;
-			left_mb->mv_y = y - my;
-			best_sad_left = sad_min;
-		}
-
-		sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1, row_sads_right2));
-		sad_min = _mm_extract_epi16(sad_min_and_index, 0);
-
-		if (sad_min < best_sad_right)
-		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
-			right_mb->mv_x = (x + sad_index) - mx - 8;
-			right_mb->mv_y = y - my;
-			best_sad_right = sad_min;
-		}
-
-    }
-
-    if ((w >= right + 16))
-    {
-    	row_sads_right1 = _mm_setzero_si128();
-    	row_sads_right2 = _mm_setzero_si128();
-
-    	for (block_row = 0; block_row < 8; ++block_row)
-    	{
-    		__m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
-    		__m128i orig_pixels = _mm_loadu_si128((void const*)(orig + mx + w*(block_row + my)));
-
-    		row_sads_right1 = _mm_add_epi16(row_sads_right1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
-    		row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
-    	}
-
-    	__m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1, row_sads_right2));
-		int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
-
-		if (sad_min < best_sad_right)
-		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
-			right_mb->mv_x = (x + sad_index) - mx - 8;
-			right_mb->mv_y = y - my;
-			best_sad_right = sad_min;
-		}
-    }
+		  if (sad_min < best_sad_right)
+			{
+				int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
+				right_mb->mv_x = (x + sad_index) - mx - 8;
+				right_mb->mv_y = y - my;
+				best_sad_right = sad_min;
+			}
+	  }*/
   }
 
   /* Here, there should be a threshold on SAD that checks if the motion vector
@@ -163,7 +148,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
      best_sad); */
 
   left_mb->use_mv = 1;
-  right_mb->use_mv = 1;
+  //right_mb->use_mv = 1;
 }
 
 void c63_motion_estimate(struct c63_common *cm)
@@ -174,7 +159,7 @@ void c63_motion_estimate(struct c63_common *cm)
   /* Luma */
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
-    for (mb_x = 0; mb_x < cm->mb_cols; mb_x+=2)
+    for (mb_x = 0; mb_x < cm->mb_cols; mb_x+=1)
     {
       me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->Y,
           cm->refframe->recons->Y, Y_COMPONENT);
@@ -184,7 +169,7 @@ void c63_motion_estimate(struct c63_common *cm)
   /* Chroma */
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
-    for (mb_x = 0; mb_x < cm->mb_cols / 2; mb_x+=2)
+    for (mb_x = 0; mb_x < cm->mb_cols / 2; mb_x+=1)
     {
       me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->U,
           cm->refframe->recons->U, U_COMPONENT);
