@@ -50,17 +50,28 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
   for (y = top; y < bottom; ++y)
   {
-    __m128i row_sads_left1 = _mm_setzero_si128();
-	__m128i row_sads_left2 = _mm_setzero_si128();
-
 	x = left;
 
-	if ((mb_x * 8 - left) == range)
+	if ((mx - left) == range)
 	{
-		for (block_row = 0; block_row < 8; ++block_row)
+		uint8_t* ref_pointer = ref + x + w*y;
+		uint8_t* orig_pointer = orig + mx + w*my;
+
+		__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+		__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+
+		// Left block
+		__m128i row_sads_left1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000);
+		__m128i row_sads_left2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101);
+
+		// Counting down to zero creates a simpler loop termination condition
+		for (block_row = 7; block_row--; )
 		{
-			__m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
-			__m128i orig_pixels = _mm_loadu_si128((void const*)(orig + mx + w*(block_row + my)));
+			ref_pointer += w;
+			orig_pointer += w;
+
+			ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+			orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
 
 			// Left block
 			row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
@@ -81,20 +92,29 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 		x += 8;
 	}
 
-	__m128i row_sads_right1;
-	__m128i row_sads_right2;
-
     for (; x < right; x+=8)
     {
-    	row_sads_left1 = _mm_setzero_si128();
-    	row_sads_left2 = _mm_setzero_si128();
-    	__m128i row_sads_right1 = _mm_setzero_si128();
-    	__m128i row_sads_right2 = _mm_setzero_si128();
+    	uint8_t* ref_pointer = ref + x + w*y;
+    	uint8_t* orig_pointer = orig + mx + w*my;
 
-		for (block_row = 0; block_row < 8; ++block_row)
+    	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+		__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+
+		// Left block
+		__m128i row_sads_left1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000);
+		__m128i row_sads_left2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101);
+
+		// Right block
+		__m128i row_sads_right1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010);
+		__m128i row_sads_right2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111);
+
+		for (block_row = 7; block_row--; )
 		{
-			__m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
-			__m128i orig_pixels = _mm_loadu_si128((void const*)(orig + mx + w*(block_row + my)));
+			ref_pointer += w;
+			orig_pointer += w;
+
+			ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+			orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
 
 			// Left block
 			row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
@@ -131,13 +151,22 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
     if ((w >= right + 16))
     {
-    	row_sads_right1 = _mm_setzero_si128();
-    	row_sads_right2 = _mm_setzero_si128();
+    	uint8_t* ref_pointer = ref + x + w*y;
+    	uint8_t* orig_pointer = orig + mx + w*my;
 
-    	for (block_row = 0; block_row < 8; ++block_row)
+		__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+		__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+
+		__m128i row_sads_right1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010);
+		__m128i row_sads_right2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111);
+
+    	for (block_row = 7; block_row--; )
     	{
-    		__m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
-    		__m128i orig_pixels = _mm_loadu_si128((void const*)(orig + mx + w*(block_row + my)));
+    		ref_pointer += w;
+    		orig_pointer += w;
+
+    		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+    		orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
 
     		row_sads_right1 = _mm_add_epi16(row_sads_right1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
     		row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
