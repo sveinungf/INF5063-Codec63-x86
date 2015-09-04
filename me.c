@@ -18,7 +18,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 {
   int someValue = mb_y*cm->padw[color_component]/8 + mb_x;
   struct macroblock *left_mb = &cm->curframe->mbs[color_component][someValue];
-  //struct macroblock *right_mb = &cm->curframe->mbs[color_component][someValue + 1];
+  struct macroblock *right_mb = &cm->curframe->mbs[color_component][someValue + 1];
 
   int range = cm->me_search_range;
 
@@ -46,14 +46,14 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int my = mb_y * 8;
 
   int best_sad_left = INT_MAX;
-  //int best_sad_right = INT_MAX;
+  int best_sad_right = INT_MAX;
 
   int leftIter;
-  //int rightIter;
+  int rightIter;
   __m128i row_sads_left1[5]; // 3 for chroma?
   __m128i row_sads_left2[5];
-  //__m128i row_sads_right1[5];
-  //__m128i row_sads_right2[5];
+  __m128i row_sads_right1[5];
+  __m128i row_sads_right2[5];
 
   for (y = top; y < bottom; ++y)
   {
@@ -62,8 +62,8 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 	    {
 	  	  row_sads_left1[q] = _mm_setzero_si128();
 	  	  row_sads_left2[q] = _mm_setzero_si128();
-	  	  //row_sads_right1[q] = _mm_setzero_si128();
-	  	  //row_sads_right2[q] = _mm_setzero_si128();
+	  	  row_sads_right1[q] = _mm_setzero_si128();
+	  	  row_sads_right2[q] = _mm_setzero_si128();
 	    }
 
 	  for (block_row = 0; block_row < 8; ++block_row)
@@ -72,8 +72,8 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 		  x = left;
 		  leftIter = 0;
-		  //rightIter = 0;
-		  /*
+		  rightIter = 0;
+
 		  if ((mb_x * 8 - left) == range)
 		  {
 			  __m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
@@ -85,7 +85,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 			  x += 8;
 			  ++leftIter;
 		  }
-			*/
+
 		  for (; x < right; x+=8)
 		  {
 			  __m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
@@ -93,13 +93,13 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 			  row_sads_left1[leftIter] = _mm_add_epi16(row_sads_left1[leftIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
 			  row_sads_left2[leftIter] = _mm_add_epi16(row_sads_left2[leftIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101));
 
-			  //row_sads_right1[rightIter] = _mm_add_epi16(row_sads_right1[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
-			  //row_sads_right2[rightIter] = _mm_add_epi16(row_sads_right2[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
+			  row_sads_right1[rightIter] = _mm_add_epi16(row_sads_right1[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
+			  row_sads_right2[rightIter] = _mm_add_epi16(row_sads_right2[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
 
 			  ++leftIter;
-			  //++rightIter;
+			  ++rightIter;
 		  }
-		  /*
+
 		  if ((w >= right + 16))
 		  {
 			  __m128i ref_pixels = _mm_loadu_si128((void const*)(ref + x + w*(block_row + y)));
@@ -107,8 +107,9 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 			  // TODO: Index 0?
 			  row_sads_right1[rightIter] = _mm_add_epi16(row_sads_right1[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
 			  row_sads_right2[rightIter] = _mm_add_epi16(row_sads_right2[rightIter], _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
+			  ++rightIter;
 		  }
-		  */
+
 	  }
 
 	  int i;
@@ -126,7 +127,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 		  }
 	  }
 
-	  /*for (i = 0; i < rightIter; ++i)
+	  for (i = 0; i < rightIter; ++i)
 	  {
 		  __m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1[i], row_sads_right2[i]));
 		  int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
@@ -134,11 +135,16 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 		  if (sad_min < best_sad_right)
 			{
 				int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
-				right_mb->mv_x = (x + sad_index) - mx - 8;
+				//right_mb->mv_x = (left + i*8 + sad_index) - mx-16;
+				if ((mb_x * 8 - left) == range) {
+					right_mb->mv_x = (left + 8 + i*8 + sad_index) - mx - 8;
+				} else {
+					right_mb->mv_x = (left + i*8 + sad_index) - mx - 8;
+				}
 				right_mb->mv_y = y - my;
 				best_sad_right = sad_min;
 			}
-	  }*/
+	  }
   }
 
   /* Here, there should be a threshold on SAD that checks if the motion vector
@@ -148,7 +154,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
      best_sad); */
 
   left_mb->use_mv = 1;
-  //right_mb->use_mv = 1;
+  right_mb->use_mv = 1;
 }
 
 void c63_motion_estimate(struct c63_common *cm)
@@ -159,7 +165,7 @@ void c63_motion_estimate(struct c63_common *cm)
   /* Luma */
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
-    for (mb_x = 0; mb_x < cm->mb_cols; mb_x+=1)
+    for (mb_x = 0; mb_x < cm->mb_cols; mb_x+=2)
     {
       me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->Y,
           cm->refframe->recons->Y, Y_COMPONENT);
@@ -169,7 +175,7 @@ void c63_motion_estimate(struct c63_common *cm)
   /* Chroma */
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
-    for (mb_x = 0; mb_x < cm->mb_cols / 2; mb_x+=1)
+    for (mb_x = 0; mb_x < cm->mb_cols / 2; mb_x+=2)
     {
       me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->U,
           cm->refframe->recons->U, U_COMPONENT);
