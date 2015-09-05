@@ -118,78 +118,69 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int best_sad_left = INT_MAX;
   int best_sad_right = INT_MAX;
 
+  const uint8_t* const orig_pointer = orig + mx + w*my;
+  __m128i left_results[4];
+  __m128i right_results[4];
+  int j, k;
+
   for (y = top; y < bottom; ++y)
   {
 	x = left;
+	j = 0;
+	k = 0;
 
 	if (doleft)
 	{
 		uint8_t* ref_pointer = ref + x + w*y;
-		uint8_t* orig_pointer = orig + mx + w*my;
-
-		__m128i result;
-
-		sad_block_8x8(orig_pointer, ref_pointer, w, &result);
-
-		int sad_min = _mm_extract_epi16(result, 0);
-
-		if (sad_min < best_sad_left)
-		{
-			int sad_index = _mm_extract_epi16(result, 1);
-			left_mb->mv_x = (x + sad_index) - mx;
-			left_mb->mv_y = y - my;
-			best_sad_left = sad_min;
-		}
+		sad_block_8x8(orig_pointer, ref_pointer, w, &left_results[j]);
 
 		x += 8;
+		++j;
 	}
 
     for (; x < right; x+=8)
     {
     	uint8_t* ref_pointer = ref + x + w*y;
-    	uint8_t* orig_pointer = orig + mx + w*my;
+    	sad_block_2x8x8(orig_pointer, ref_pointer, w, &left_results[j], &right_results[k]);
 
-    	__m128i result1, result2;
-    	sad_block_2x8x8(orig_pointer, ref_pointer, w, &result1, &result2);
-
-		int sad_min = _mm_extract_epi16(result1, 0);
-
-		if (sad_min < best_sad_left)
-		{
-			int sad_index = _mm_extract_epi16(result1, 1);
-			left_mb->mv_x = x + sad_index - mx;
-			left_mb->mv_y = y - my;
-			best_sad_left = sad_min;
-		}
-
-		sad_min = _mm_extract_epi16(result2, 0);
-
-		if (sad_min < best_sad_right)
-		{
-			int sad_index = _mm_extract_epi16(result2, 1);
-			right_mb->mv_x = x + sad_index - mx - 8;
-			right_mb->mv_y = y - my;
-			best_sad_right = sad_min;
-		}
+		++j;
+		++k;
     }
 
     if (doright)
     {
     	uint8_t* ref_pointer = ref + x + w*y;
-    	uint8_t* orig_pointer = orig + mx + w*my + 8;
+    	sad_block_8x8(orig_pointer + 8, ref_pointer, w, &right_results[k]);
 
-    	__m128i result;
-    	sad_block_8x8(orig_pointer, ref_pointer, w, &result);
+    	++k;
+    }
 
-		int sad_min = _mm_extract_epi16(result, 0);
+    int i;
 
-		if (sad_min < best_sad_right)
-		{
-			int sad_index = _mm_extract_epi16(result, 1);
-			right_mb->mv_x = (x + sad_index) - mx - 8;
-			right_mb->mv_y = y - my;
-			best_sad_right = sad_min;
-		}
+    for (i = 0; i < j; ++i)
+    {
+    	int sad_min = _mm_extract_epi16(left_results[i], 0);
+
+    	if (sad_min < best_sad_left)
+    	{
+    		int sad_index = _mm_extract_epi16(left_results[i], 1);
+    		left_mb->mv_x = left + i*8 + sad_index - mx;
+    		left_mb->mv_y = y - my;
+    		best_sad_left = sad_min;
+    	}
+    }
+
+    for (i = 0; i < k; ++i)
+    {
+    	int sad_min = _mm_extract_epi16(right_results[i], 0);
+
+    	if (sad_min < best_sad_right)
+    	{
+    		int sad_index = _mm_extract_epi16(right_results[i], 1);
+    		right_mb->mv_x = left + i*8 + sad_index - mx;
+    		right_mb->mv_y = y - my;
+    		best_sad_right = sad_min;
+    	}
     }
   }
 
