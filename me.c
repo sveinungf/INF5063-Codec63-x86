@@ -13,6 +13,32 @@
 #include "dsp.h"
 #include "me.h"
 
+// gcc complains if _mm_extract_epi16() has a variable as selector
+static int c63_mm_extract_epi16_varselector(const __m128i a, const int imm8)
+{
+	switch (imm8)
+	{
+	case 0:
+		return _mm_extract_epi16(a, 0);
+	case 1:
+		return _mm_extract_epi16(a, 1);
+	case 2:
+		return _mm_extract_epi16(a, 2);
+	case 3:
+		return _mm_extract_epi16(a, 3);
+	case 4:
+		return _mm_extract_epi16(a, 4);
+	case 5:
+		return _mm_extract_epi16(a, 5);
+	case 6:
+		return _mm_extract_epi16(a, 6);
+	case 7:
+		return _mm_extract_epi16(a, 7);
+	default:
+		return 0;
+	}
+}
+
 static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result)
 {
 	const uint8_t* ref_pointer = ref;
@@ -121,6 +147,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   const uint8_t* const orig_pointer = orig + mx + w*my;
   __m128i left_results[4];
   __m128i right_results[4];
+  __m128i row_results_left[8];
   __m128i allOnes = _mm_set1_epi16(0xFFFF);
   int j, k;
 
@@ -171,45 +198,10 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
     __m128i result = _mm_minpos_epu16(minposValues);
     int sad_min = _mm_extract_epi16(result, 0);
+    int index = _mm_extract_epi16(result, 1);
+    int sad_index = c63_mm_extract_epi16_varselector(minposIndexes, index);
 
-    if (sad_min < best_sad_left)
-    {
-    	int sad_index = 0;
-    	const int selector = _mm_extract_epi16(result, 1);
-
-    	// gcc complains if _mm_extract_epi16() has a variable as selector
-    	switch (selector)
-    	{
-    	case 0:
-    		sad_index = _mm_extract_epi16(minposIndexes, 0);
-    		break;
-    	case 1:
-    		sad_index = _mm_extract_epi16(minposIndexes, 1);
-    		break;
-    	case 2:
-    		sad_index = _mm_extract_epi16(minposIndexes, 2);
-    		break;
-    	case 3:
-    		sad_index = _mm_extract_epi16(minposIndexes, 3);
-    		break;
-    	case 4:
-    		sad_index = _mm_extract_epi16(minposIndexes, 4);
-    		break;
-    	case 5:
-    		sad_index = _mm_extract_epi16(minposIndexes, 5);
-    		break;
-    	case 6:
-    		sad_index = _mm_extract_epi16(minposIndexes, 6);
-    		break;
-    	case 7:
-    		sad_index = _mm_extract_epi16(minposIndexes, 7);
-    		break;
-    	}
-
-    	left_mb->mv_x = sad_index;
-    	left_mb->mv_y = y - my;
-    	best_sad_left = sad_min;
-    }
+    row_results_left[y%8] = _mm_set_epi16(0,0,0,0,0,0,sad_index,sad_min);
 
     int i;
 
@@ -224,6 +216,33 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     		right_mb->mv_y = y - my;
     		best_sad_right = sad_min;
     	}
+    }
+
+    if ((y+1) % 8 == 0)
+    {
+    	__m128i interleaved01 = _mm_unpacklo_epi16(row_results_left[0], row_results_left[1]);
+    	__m128i interleaved23 = _mm_unpacklo_epi16(row_results_left[2], row_results_left[3]);
+    	__m128i interleaved45 = _mm_unpacklo_epi16(row_results_left[4], row_results_left[5]);
+    	__m128i interleaved67 = _mm_unpacklo_epi16(row_results_left[6], row_results_left[7]);
+
+    	__m128i interleaved03 = _mm_unpacklo_epi32(interleaved01, interleaved23);
+    	__m128i interleaved47 = _mm_unpacklo_epi32(interleaved45, interleaved67);
+
+    	__m128i minposValues = _mm_unpacklo_epi64(interleaved03, interleaved47);
+    	__m128i minposIndexes = _mm_unpackhi_epi64(interleaved03, interleaved47);
+
+    	__m128i result = _mm_minpos_epu16(minposValues);
+		int sad_min = _mm_extract_epi16(result, 0);
+
+		if (sad_min < best_sad_left)
+		{
+			const int selector = _mm_extract_epi16(result, 1);
+			int sad_index_x = c63_mm_extract_epi16_varselector(minposIndexes, selector);
+
+			left_mb->mv_x = sad_index_x;
+			left_mb->mv_y = selector + (y/8)*8 - my;
+			best_sad_left = sad_min;
+		}
     }
   }
 
