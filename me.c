@@ -13,6 +13,75 @@
 #include "dsp.h"
 #include "me.h"
 
+static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result)
+{
+	const uint8_t* ref_pointer = ref;
+	const uint8_t* orig_pointer = orig;
+
+	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+	__m128i orig_pixels = _mm_loadl_epi64((void const*)(orig_pointer));
+
+	__m128i row_sads1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
+	__m128i row_sads2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
+
+	unsigned int block_row;
+
+	// Counting down to zero creates a simpler loop termination condition
+	for (block_row = 7; block_row--; )
+	{
+		ref_pointer += stride;
+		orig_pointer += stride;
+
+		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+		orig_pixels = _mm_loadl_epi64((void const*)(orig_pointer));
+
+		// Left block
+		row_sads1 = _mm_add_epi16(row_sads1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
+		row_sads2 = _mm_add_epi16(row_sads2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
+	}
+
+	*result = _mm_minpos_epu16(_mm_add_epi16(row_sads1, row_sads2));
+}
+
+static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result1, __m128i* const result2)
+{
+	const uint8_t* ref_pointer = ref;
+	const uint8_t* orig_pointer = orig;
+
+	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+	__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+
+	// Left block
+	__m128i row_sads_left1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
+	__m128i row_sads_left2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
+
+	// Right block
+	__m128i row_sads_right1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010);
+	__m128i row_sads_right2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111);
+
+	unsigned int block_row;
+
+	for (block_row = 7; block_row--; )
+	{
+		ref_pointer += stride;
+		orig_pointer += stride;
+
+		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+		orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+
+		// Left block
+		row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
+		row_sads_left2 = _mm_add_epi16(row_sads_left2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
+
+		// Right block
+		row_sads_right1 = _mm_add_epi16(row_sads_right1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010));
+		row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111));
+	}
+
+	*result1 = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1, row_sads_left2));
+	*result2 = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1, row_sads_right2));
+}
+
 /* Motion estimation for 8x8 block */
 static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     uint8_t *orig, uint8_t *ref, int color_component, int doleft, int doright)
@@ -41,7 +110,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   if (right > (w - 8)) { right = w - 8; }
   if (bottom > (h - 8)) { bottom = h - 8; }
 
-  int x, y, block_row;
+  int x, y;
 
   int mx = mb_x * 8;
   int my = mb_y * 8;
@@ -58,33 +127,15 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 		uint8_t* ref_pointer = ref + x + w*y;
 		uint8_t* orig_pointer = orig + mx + w*my;
 
-		__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-		__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+		__m128i result;
 
-		// Left block
-		__m128i row_sads_left1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000);
-		__m128i row_sads_left2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101);
+		sad_block_8x8(orig_pointer, ref_pointer, w, &result);
 
-		// Counting down to zero creates a simpler loop termination condition
-		for (block_row = 7; block_row--; )
-		{
-			ref_pointer += w;
-			orig_pointer += w;
-
-			ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-			orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
-
-			// Left block
-			row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
-			row_sads_left2 = _mm_add_epi16(row_sads_left2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101));
-		}
-
-		__m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1, row_sads_left2));
-		int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
+		int sad_min = _mm_extract_epi16(result, 0);
 
 		if (sad_min < best_sad_left)
 		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
+			int sad_index = _mm_extract_epi16(result, 1);
 			left_mb->mv_x = (x + sad_index) - mx;
 			left_mb->mv_y = y - my;
 			best_sad_left = sad_min;
@@ -98,87 +149,43 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     	uint8_t* ref_pointer = ref + x + w*y;
     	uint8_t* orig_pointer = orig + mx + w*my;
 
-    	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-		__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+    	__m128i result1, result2;
+    	sad_block_2x8x8(orig_pointer, ref_pointer, w, &result1, &result2);
 
-		// Left block
-		__m128i row_sads_left1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000);
-		__m128i row_sads_left2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101);
-
-		// Right block
-		__m128i row_sads_right1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010);
-		__m128i row_sads_right2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111);
-
-		for (block_row = 7; block_row--; )
-		{
-			ref_pointer += w;
-			orig_pointer += w;
-
-			ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-			orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
-
-			// Left block
-			row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_000));
-			row_sads_left2 = _mm_add_epi16(row_sads_left2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_101));
-
-			// Right block
-			row_sads_right1 = _mm_add_epi16(row_sads_right1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
-			row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
-		}
-
-		__m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1, row_sads_left2));
-		int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
+		int sad_min = _mm_extract_epi16(result1, 0);
 
 		if (sad_min < best_sad_left)
 		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
-			left_mb->mv_x = (x + sad_index) - mx;
+			int sad_index = _mm_extract_epi16(result1, 1);
+			left_mb->mv_x = x + sad_index - mx;
 			left_mb->mv_y = y - my;
 			best_sad_left = sad_min;
 		}
 
-		sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1, row_sads_right2));
-		sad_min = _mm_extract_epi16(sad_min_and_index, 0);
+		sad_min = _mm_extract_epi16(result2, 0);
 
 		if (sad_min < best_sad_right)
 		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
-			right_mb->mv_x = (x + sad_index) - mx - 8;
+			int sad_index = _mm_extract_epi16(result2, 1);
+			right_mb->mv_x = x + sad_index - mx - 8;
 			right_mb->mv_y = y - my;
 			best_sad_right = sad_min;
 		}
-
     }
 
     if (doright)
     {
     	uint8_t* ref_pointer = ref + x + w*y;
-    	uint8_t* orig_pointer = orig + mx + w*my;
+    	uint8_t* orig_pointer = orig + mx + w*my + 8;
 
-		__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-		__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+    	__m128i result;
+    	sad_block_8x8(orig_pointer, ref_pointer, w, &result);
 
-		__m128i row_sads_right1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010);
-		__m128i row_sads_right2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111);
-
-    	for (block_row = 7; block_row--; )
-    	{
-    		ref_pointer += w;
-    		orig_pointer += w;
-
-    		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-    		orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
-
-    		row_sads_right1 = _mm_add_epi16(row_sads_right1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_010));
-    		row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, B_111));
-    	}
-
-    	__m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1, row_sads_right2));
-		int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
+		int sad_min = _mm_extract_epi16(result, 0);
 
 		if (sad_min < best_sad_right)
 		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
+			int sad_index = _mm_extract_epi16(result, 1);
 			right_mb->mv_x = (x + sad_index) - mx - 8;
 			right_mb->mv_y = y - my;
 			best_sad_right = sad_min;
