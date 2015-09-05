@@ -121,10 +121,16 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   const uint8_t* const orig_pointer = orig + mx + w*my;
   __m128i left_results[4];
   __m128i right_results[4];
+  __m128i allOnes = _mm_set1_epi16(0xFFFF);
   int j, k;
 
   for (y = top; y < bottom; ++y)
   {
+	  left_results[0] = allOnes;
+	  left_results[1] = allOnes;
+	  left_results[2] = allOnes;
+	  left_results[3] = allOnes;
+
 	x = left;
 	j = 0;
 	k = 0;
@@ -133,6 +139,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 	{
 		uint8_t* ref_pointer = ref + x + w*y;
 		sad_block_8x8(orig_pointer, ref_pointer, w, &left_results[j]);
+		left_results[j] = _mm_add_epi16(_mm_set_epi16(0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF,j*8+left-mx,0), left_results[j]);
 
 		x += 8;
 		++j;
@@ -142,6 +149,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     {
     	uint8_t* ref_pointer = ref + x + w*y;
     	sad_block_2x8x8(orig_pointer, ref_pointer, w, &left_results[j], &right_results[k]);
+    	left_results[j] = _mm_add_epi16(_mm_set_epi16(0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF,j*8+left-mx,0), left_results[j]);
 
 		++j;
 		++k;
@@ -155,20 +163,55 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     	++k;
     }
 
-    int i;
+    __m128i interleaved01 = _mm_unpacklo_epi16(left_results[0], left_results[1]);
+    __m128i interleaved23 = _mm_unpacklo_epi16(left_results[2], left_results[3]);
+    __m128i interleaved = _mm_unpacklo_epi32(interleaved01, interleaved23);
+    __m128i minposValues = _mm_unpacklo_epi64(interleaved, allOnes);
+    __m128i minposIndexes = _mm_unpackhi_epi64(interleaved, allOnes);
 
-    for (i = 0; i < j; ++i)
+    __m128i result = _mm_minpos_epu16(minposValues);
+    int sad_min = _mm_extract_epi16(result, 0);
+
+    if (sad_min < best_sad_left)
     {
-    	int sad_min = _mm_extract_epi16(left_results[i], 0);
+    	int sad_index = 0;
+    	const int selector = _mm_extract_epi16(result, 1);
 
-    	if (sad_min < best_sad_left)
+    	// gcc complains if _mm_extract_epi16() has a variable as selector
+    	switch (selector)
     	{
-    		int sad_index = _mm_extract_epi16(left_results[i], 1);
-    		left_mb->mv_x = left + i*8 + sad_index - mx;
-    		left_mb->mv_y = y - my;
-    		best_sad_left = sad_min;
+    	case 0:
+    		sad_index = _mm_extract_epi16(minposIndexes, 0);
+    		break;
+    	case 1:
+    		sad_index = _mm_extract_epi16(minposIndexes, 1);
+    		break;
+    	case 2:
+    		sad_index = _mm_extract_epi16(minposIndexes, 2);
+    		break;
+    	case 3:
+    		sad_index = _mm_extract_epi16(minposIndexes, 3);
+    		break;
+    	case 4:
+    		sad_index = _mm_extract_epi16(minposIndexes, 4);
+    		break;
+    	case 5:
+    		sad_index = _mm_extract_epi16(minposIndexes, 5);
+    		break;
+    	case 6:
+    		sad_index = _mm_extract_epi16(minposIndexes, 6);
+    		break;
+    	case 7:
+    		sad_index = _mm_extract_epi16(minposIndexes, 7);
+    		break;
     	}
+
+    	left_mb->mv_x = sad_index;
+    	left_mb->mv_y = y - my;
+    	best_sad_left = sad_min;
     }
+
+    int i;
 
     for (i = 0; i < k; ++i)
     {
