@@ -8,13 +8,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <immintrin.h>
+#include <stdbool.h>
 
 #include "dsp.h"
 #include "me.h"
 
 /* Motion estimation for 8x8 block */
 static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
-    uint8_t *orig, uint8_t *ref, int color_component)
+    uint8_t *orig, uint8_t *ref, int color_component, int doleft, int doright)
 {
   int someValue = mb_y*cm->padw[color_component]/8 + mb_x;
   struct macroblock *left_mb = &cm->curframe->mbs[color_component][someValue];
@@ -52,7 +53,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   {
 	x = left;
 
-	if ((mx - left) == range)
+	if (doleft)
 	{
 		uint8_t* ref_pointer = ref + x + w*y;
 		uint8_t* orig_pointer = orig + mx + w*my;
@@ -149,7 +150,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
     }
 
-    if ((w >= right + 16))
+    if (doright)
     {
     	uint8_t* ref_pointer = ref + x + w*y;
     	uint8_t* orig_pointer = orig + mx + w*my;
@@ -199,27 +200,44 @@ void c63_motion_estimate(struct c63_common *cm)
 {
   /* Compare this frame with previous reconstructed frame */
   int mb_x, mb_y;
+  uint8_t* orig_Y = cm->curframe->orig->Y;
+  uint8_t* orig_U = cm->curframe->orig->U;
+  uint8_t* orig_V = cm->curframe->orig->V;
+  uint8_t* recons_Y = cm->refframe->recons->Y;
+  uint8_t* recons_U = cm->refframe->recons->U;
+  uint8_t* recons_V = cm->refframe->recons->V;
 
   /* Luma */
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
-    for (mb_x = 0; mb_x < cm->mb_cols; mb_x+=2)
+	me_block_8x8(cm, 0, mb_y, orig_Y, recons_Y, Y_COMPONENT, false, true);
+	me_block_8x8(cm, 1, mb_y, orig_Y, recons_Y, Y_COMPONENT, false, true);
+
+	unsigned int end = cm->mb_cols - 2;
+    for (mb_x = 2; mb_x < end; mb_x+=2)
     {
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->Y,
-          cm->refframe->recons->Y, Y_COMPONENT);
+      me_block_8x8(cm, mb_x, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, true);
     }
+
+    me_block_8x8(cm, end, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, false);
+    me_block_8x8(cm, end + 1, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, false);
   }
 
   /* Chroma */
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
-    for (mb_x = 0; mb_x < cm->mb_cols / 2; mb_x+=2)
+	me_block_8x8(cm, 0, mb_y, orig_U, recons_U, U_COMPONENT, false, true);
+	me_block_8x8(cm, 0, mb_y, orig_V, recons_V, V_COMPONENT, false, true);
+
+	unsigned int end = (cm->mb_cols / 2) - 1;
+    for (mb_x = 1; mb_x < end; mb_x+=2)
     {
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->U,
-          cm->refframe->recons->U, U_COMPONENT);
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->V,
-          cm->refframe->recons->V, V_COMPONENT);
+      me_block_8x8(cm, mb_x, mb_y, orig_U, recons_U, U_COMPONENT, true, true);
+      me_block_8x8(cm, mb_x, mb_y, orig_V, recons_V, V_COMPONENT, true, true);
     }
+
+    me_block_8x8(cm, end, mb_y, orig_U, recons_U, U_COMPONENT, true, false);
+    me_block_8x8(cm, end, mb_y, orig_V, recons_V, V_COMPONENT, true, false);
   }
 }
 
