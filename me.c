@@ -13,8 +13,8 @@
 #include "dsp.h"
 #include "me.h"
 
-// gcc complains if _mm_extract_epi16() has a variable as selector
-static int c63_mm_extract_epi16_varselector(const __m128i a, const int imm8)
+// A simple workaround since gcc won't compile if _mm_extract_epi16() has a variable as selector
+static int c63_mm_extract_epi16(const __m128i a, const int imm8)
 {
 	switch (imm8)
 	{
@@ -61,7 +61,6 @@ static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, c
 		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
 		orig_pixels = _mm_loadl_epi64((void const*)(orig_pointer));
 
-		// Left block
 		row_sads1 = _mm_add_epi16(row_sads1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
 		row_sads2 = _mm_add_epi16(row_sads2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
 	}
@@ -69,7 +68,7 @@ static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, c
 	*result = _mm_minpos_epu16(_mm_add_epi16(row_sads1, row_sads2));
 }
 
-static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result1, __m128i* const result2)
+static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result_left, __m128i* const result_right)
 {
 	const uint8_t* ref_pointer = ref;
 	const uint8_t* orig_pointer = orig;
@@ -104,9 +103,25 @@ static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref,
 		row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111));
 	}
 
-	*result1 = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1, row_sads_left2));
-	*result2 = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1, row_sads_right2));
+	*result_left = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1, row_sads_left2));
+	*result_right = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1, row_sads_right2));
 }
+
+static void sad_minpos_array_8(const __m128i row_results[8], __m128i* const minposValues, __m128i* const minposIndexes)
+{
+	__m128i interleaved01 = _mm_unpacklo_epi16(row_results[0], row_results[1]);
+	__m128i interleaved23 = _mm_unpacklo_epi16(row_results[2], row_results[3]);
+	__m128i interleaved45 = _mm_unpacklo_epi16(row_results[4], row_results[5]);
+	__m128i interleaved67 = _mm_unpacklo_epi16(row_results[6], row_results[7]);
+
+	__m128i interleaved03 = _mm_unpacklo_epi32(interleaved01, interleaved23);
+	__m128i interleaved47 = _mm_unpacklo_epi32(interleaved45, interleaved67);
+
+	*minposValues = _mm_unpacklo_epi64(interleaved03, interleaved47);
+	*minposIndexes = _mm_unpackhi_epi64(interleaved03, interleaved47);
+}
+
+
 
 /* Motion estimation for 8x8 block */
 static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
@@ -148,15 +163,23 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   __m128i left_results[4];
   __m128i right_results[4];
   __m128i row_results_left[8];
-  __m128i allOnes = _mm_set1_epi16(0xFFFF);
+  __m128i row_results_right[8];
+  __m128i row_results_left_m128indexes[8];
+  __m128i row_results_right_m128indexes[8];
+  const __m128i all_ones = _mm_set1_epi16(0xFFFF);
   int j, k;
 
   for (y = top; y < bottom; ++y)
   {
-	  left_results[0] = allOnes;
-	  left_results[1] = allOnes;
-	  left_results[2] = allOnes;
-	  left_results[3] = allOnes;
+	  left_results[0] = all_ones;
+	  left_results[1] = all_ones;
+	  left_results[2] = all_ones;
+	  left_results[3] = all_ones;
+
+	  right_results[0] = all_ones;
+	  right_results[1] = all_ones;
+	  right_results[2] = all_ones;
+	  right_results[3] = all_ones;
 
 	x = left;
 	j = 0;
@@ -164,9 +187,8 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 	if (doleft)
 	{
-		uint8_t* ref_pointer = ref + x + w*y;
+		uint8_t* ref_pointer = ref + left + w*y;
 		sad_block_8x8(orig_pointer, ref_pointer, w, &left_results[j]);
-		left_results[j] = _mm_add_epi16(_mm_set_epi16(0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF,j*8+left-mx,0), left_results[j]);
 
 		x += 8;
 		++j;
@@ -176,7 +198,6 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     {
     	uint8_t* ref_pointer = ref + x + w*y;
     	sad_block_2x8x8(orig_pointer, ref_pointer, w, &left_results[j], &right_results[k]);
-    	left_results[j] = _mm_add_epi16(_mm_set_epi16(0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF,0xFFFF,j*8+left-mx,0), left_results[j]);
 
 		++j;
 		++k;
@@ -184,7 +205,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
     if (doright)
     {
-    	uint8_t* ref_pointer = ref + x + w*y;
+    	uint8_t* ref_pointer = ref + right + w*y;
     	sad_block_8x8(orig_pointer + 8, ref_pointer, w, &right_results[k]);
 
     	++k;
@@ -192,56 +213,57 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
     __m128i interleaved01 = _mm_unpacklo_epi16(left_results[0], left_results[1]);
     __m128i interleaved23 = _mm_unpacklo_epi16(left_results[2], left_results[3]);
-    __m128i interleaved = _mm_unpacklo_epi32(interleaved01, interleaved23);
-    __m128i minposValues = _mm_unpacklo_epi64(interleaved, allOnes);
-    __m128i minposIndexes = _mm_unpackhi_epi64(interleaved, allOnes);
+    __m128i interleaved03 = _mm_unpacklo_epi32(interleaved01, interleaved23);
+    __m128i minposValues = _mm_unpacklo_epi64(interleaved03, all_ones);
 
-    __m128i result = _mm_minpos_epu16(minposValues);
-    int sad_min = _mm_extract_epi16(result, 0);
-    int index = _mm_extract_epi16(result, 1);
-    int sad_index = c63_mm_extract_epi16_varselector(minposIndexes, index);
+    row_results_left[y%8] = _mm_minpos_epu16(minposValues);
+    row_results_left_m128indexes[y%8] = interleaved03;
 
-    row_results_left[y%8] = _mm_set_epi16(0,0,0,0,0,0,sad_index,sad_min);
+    interleaved01 = _mm_unpacklo_epi16(right_results[0], right_results[1]);
+    interleaved23 = _mm_unpacklo_epi16(right_results[2], right_results[3]);
+    interleaved03 = _mm_unpacklo_epi32(interleaved01, interleaved23);
+    minposValues = _mm_unpacklo_epi64(interleaved03, all_ones);
 
-    int i;
-
-    for (i = 0; i < k; ++i)
-    {
-    	int sad_min = _mm_extract_epi16(right_results[i], 0);
-
-    	if (sad_min < best_sad_right)
-    	{
-    		int sad_index = _mm_extract_epi16(right_results[i], 1);
-    		right_mb->mv_x = left + i*8 + sad_index - mx;
-    		right_mb->mv_y = y - my;
-    		best_sad_right = sad_min;
-    	}
-    }
+    row_results_right[y%8] = _mm_minpos_epu16(minposValues);
+    row_results_right_m128indexes[y%8] = interleaved03;
 
     if ((y+1) % 8 == 0)
     {
-    	__m128i interleaved01 = _mm_unpacklo_epi16(row_results_left[0], row_results_left[1]);
-    	__m128i interleaved23 = _mm_unpacklo_epi16(row_results_left[2], row_results_left[3]);
-    	__m128i interleaved45 = _mm_unpacklo_epi16(row_results_left[4], row_results_left[5]);
-    	__m128i interleaved67 = _mm_unpacklo_epi16(row_results_left[6], row_results_left[7]);
-
-    	__m128i interleaved03 = _mm_unpacklo_epi32(interleaved01, interleaved23);
-    	__m128i interleaved47 = _mm_unpacklo_epi32(interleaved45, interleaved67);
-
-    	__m128i minposValues = _mm_unpacklo_epi64(interleaved03, interleaved47);
-    	__m128i minposIndexes = _mm_unpackhi_epi64(interleaved03, interleaved47);
+    	__m128i minposValues, minposIndexes;
+    	sad_minpos_array_8(row_results_left, &minposValues, &minposIndexes);
 
     	__m128i result = _mm_minpos_epu16(minposValues);
 		int sad_min = _mm_extract_epi16(result, 0);
 
 		if (sad_min < best_sad_left)
 		{
-			const int selector = _mm_extract_epi16(result, 1);
-			int sad_index_x = c63_mm_extract_epi16_varselector(minposIndexes, selector);
+			int indexIntoMinposIndexes = _mm_extract_epi16(result, 1);
+			int indexIntoInterleaved = c63_mm_extract_epi16(minposIndexes, indexIntoMinposIndexes);
+
+			int sad_index_x = indexIntoInterleaved*8 + left - mx + c63_mm_extract_epi16(row_results_left_m128indexes[indexIntoMinposIndexes], indexIntoInterleaved + 4);
 
 			left_mb->mv_x = sad_index_x;
-			left_mb->mv_y = selector + (y/8)*8 - my;
+			// (y/8)*8 finds the nearest lower number evenly divisible by 8
+			left_mb->mv_y = indexIntoMinposIndexes + (y/8)*8 - my;
 			best_sad_left = sad_min;
+		}
+
+		sad_minpos_array_8(row_results_right, &minposValues, &minposIndexes);
+
+		result = _mm_minpos_epu16(minposValues);
+		sad_min = _mm_extract_epi16(result, 0);
+
+		if (sad_min < best_sad_right)
+		{
+			int indexIntoMinposIndexes = _mm_extract_epi16(result, 1);
+			int indexIntoInterleaved = c63_mm_extract_epi16(minposIndexes, indexIntoMinposIndexes);
+
+			int sad_index_x = indexIntoInterleaved*8 + left - mx + c63_mm_extract_epi16(row_results_right_m128indexes[indexIntoMinposIndexes], indexIntoInterleaved + 4);
+
+			right_mb->mv_x = sad_index_x;
+			// (y/8)*8 finds the nearest lower number evenly divisible by 8
+			right_mb->mv_y = indexIntoMinposIndexes + (y/8)*8 - my;
+			best_sad_right = sad_min;
 		}
     }
   }
