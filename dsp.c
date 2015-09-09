@@ -54,8 +54,7 @@ static void dct_1d_general(float* in_data, float* out_data, float lookup[64])
 	__m256 in256aa = _mm256_insertf128_ps(_mm256_castps128_ps256(in128a), in128a, 1);
 	__m256 in256bb = _mm256_insertf128_ps(_mm256_castps128_ps256(in128b), in128b, 1);
 
-	__m256 current, dct_values, multiplied;
-	__m256 sum = _mm256_setzero_ps();
+	__m256 current, dct_values, multiplied, sum;
 
 	current = _mm256_shuffle_ps(in256aa, in256aa, 0b00000000);
 	dct_values = _mm256_load_ps(lookup);
