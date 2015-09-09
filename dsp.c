@@ -121,36 +121,44 @@ static void idct_1d(float *in_data, float *out_data)
 	}
 }
 
+
 static void scale_block(float *in_data, float *out_data)
 {
 	int u, v;
 	
 	__m256 v_in, v_res, v_temp;
-	__m256 av = _mm256_load_ps(&test1);
+	
+	__m256 av1 = _mm256_set1_ps(ISQRT2);
+	__m256 av2 = _mm256_set1_ps(1.0f);
 	__m256 au = _mm256_load_ps(&test2);
-	v_temp = av;
+	
+	v_temp = av1;
 	for (v = 0; v < 8; v += 4)
 	{
 		v_in = _mm256_load_ps(&in_data[v*8]);
-		v_res = _mm256_mul_ps(v_in, v_temp);
+		v_res = _mm256_mul_ps(v_in, au);
+		v_res = _mm256_mul_ps(v_res, v_temp);
 		_mm256_store_ps(&out_data[v*8], v_res);
 		
-		v_temp = au;
+		v_temp = av2;
 		
 		v_in = _mm256_load_ps(&in_data[(v+1)*8]);
-		v_res = _mm256_mul_ps(v_in, v_temp);
+		v_res = _mm256_mul_ps(v_in, au);
+		v_res = _mm256_mul_ps(v_res, v_temp);
 		_mm256_store_ps(&out_data[(v+1)*8], v_res);
 		
 		
 		v_in = _mm256_load_ps(&in_data[(v+2)*8]);
-		v_res = _mm256_mul_ps(v_in, v_temp);
+		v_res = _mm256_mul_ps(v_in, au);
+		v_res = _mm256_mul_ps(v_res, v_temp);
 		_mm256_store_ps(&out_data[(v+2)*8], v_res);
 		
 		
 		v_in = _mm256_load_ps(&in_data[(v+3)*8]);
-		v_res = _mm256_mul_ps(v_in, v_temp);
+		v_res = _mm256_mul_ps(v_in, au);
+		v_res = _mm256_mul_ps(v_res, v_temp);
 		_mm256_store_ps(&out_data[(v+3)*8], v_res);
-	}	
+	}
 }
 
 static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
