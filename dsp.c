@@ -141,25 +141,43 @@ static void scale_block(float *in_data, float *out_data)
 
 static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
-	int zigzag;
-
-	__m128i vu, vv, vc;
+	int zigzag, i;
 	
-	uint8_t a_v[8];
-	uint8_t a_u[8];
 	float adct[8] __attribute__((aligned(32)));
-	float quant_table[8] __attribute__((aligned(32)));
-	float out_data2[64] __attribute__((aligned(32)));
 
-	for (zigzag = 0; zigzag < 64; ++zigzag)
+	__m128i quants;
+
+	__m256d q_tbl, vd_res, v_pd;
+
+	__m256 v_res, v_dct;
+	__m256 v_temp = _mm256_set1_ps(0.25f);
+
+	for (zigzag = 0; zigzag < 64; zigzag += 8)
 	{
-		uint8_t u = zigzag_U[zigzag];
-		uint8_t v = zigzag_V[zigzag];
+		for(i = 0; i < 8; ++i)
+		{
+			adct[i] = in_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]];
+		}
 
-		float dct = in_data[v*8+u];
+		quants = _mm_loadu_si128(&quant_tbl[zigzag]);
 
-		// Zig-zag and quantize //
-		out_data[zigzag] = (float) round((dct / 4.0) / quant_tbl[zigzag]); //_mm_cvtepi8_epi16/32
+		v_dct = _mm256_load_ps(&adct);
+		v_res = _mm256_mul_ps(v_dct, v_temp);
+
+		v_pd = _mm256_cvtps_pd(_mm256_castps256_ps128(v_res));
+		q_tbl = _mm256_cvtepi32_pd(_mm_cvtepu8_epi32(quants));
+		vd_res = _mm256_div_pd(v_pd, q_tbl);
+		_mm_store_ps(&out_data[zigzag], _mm256_cvtpd_ps(vd_res));
+
+		v_pd = _mm256_cvtps_pd(_mm256_extractf128_ps(v_res, 0b00000001));
+		q_tbl = _mm256_cvtepi32_pd(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
+		vd_res = _mm256_div_pd(v_pd, q_tbl);
+		_mm_store_ps(&out_data[zigzag+4], _mm256_cvtpd_ps(vd_res));
+
+		for(i = 0; i < 8; ++i)
+		{
+			out_data[zigzag+i] = round(out_data[zigzag+i]);
+		}
 	}
 }
 			
