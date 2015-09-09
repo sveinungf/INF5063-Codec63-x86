@@ -82,10 +82,14 @@ static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref,
 	*result2 = _mm_add_epi16(row_sads_right1, row_sads_right2);
 }
 
-static void set_motion_vectors(struct macroblock* mb, __m128i* min_values, __m128i* min_indexes, int left, int top, int mx, int my)
+static void set_motion_vectors(struct macroblock* const mb, const __m128i* const min_values, const __m128i* const min_indexes, const int left, const int top, const int mx, const int my)
 {
-	uint16_t* values = (uint16_t*) min_values;
-	uint16_t* indexes = (uint16_t*) min_indexes;
+	uint16_t values[8] __attribute__((aligned(16)));
+	uint16_t indexes[8] __attribute__((aligned(16)));
+
+	_mm_store_si128((__m128i*) values, *min_values);
+	_mm_store_si128((__m128i*) indexes, *min_indexes);
+
 	unsigned int min = values[0];
 	unsigned int vector_index = 0;
 	unsigned int sad_index = indexes[0];
