@@ -117,9 +117,9 @@ static void set_motion_vectors(struct macroblock* mb, __m128i* min_values, __m12
 static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     uint8_t *orig, uint8_t *ref, int color_component, int doleft, int doright)
 {
-  int someValue = mb_y*cm->padw[color_component]/8 + mb_x;
-  struct macroblock *left_mb = &cm->curframe->mbs[color_component][someValue];
-  struct macroblock *right_mb = &cm->curframe->mbs[color_component][someValue + 1];
+  int mb_index = mb_y*cm->padw[color_component]/8 + mb_x;
+  struct macroblock *left_mb = &cm->curframe->mbs[color_component][mb_index];
+  struct macroblock *right_mb = &cm->curframe->mbs[color_component][mb_index + 1];
 
   int range = cm->me_search_range;
 
@@ -148,15 +148,15 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
   const uint8_t* const orig_pointer = orig + mx + w*my;
 
-  const __m128i all_ones = _mm_set1_epi16(0x7FFF); // TODO: rename
+  const __m128i m128i_epi16_max = _mm_set1_epi16(0x7FFF);
   const __m128i all_zeros = _mm_setzero_si128();
   const __m128i incrementor = _mm_set1_epi16(1);
   const __m128i row_incrementor = _mm_set1_epi16(5);
 
   __m128i counter = all_zeros;
-  __m128i sad_min_values_left = all_ones;
+  __m128i sad_min_values_left = m128i_epi16_max;
   __m128i sad_min_indexes_left = all_zeros;
-  __m128i sad_min_values_right = all_ones;
+  __m128i sad_min_values_right = m128i_epi16_max;
   __m128i sad_min_indexes_right = all_zeros;
 
   for (y = top; y < bottom; ++y)
