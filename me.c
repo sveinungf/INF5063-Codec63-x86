@@ -87,7 +87,6 @@ static void set_motion_vectors(struct macroblock* mb, __m128i* min_values, __m12
 	uint16_t* values = (uint16_t*) min_values;
 	uint16_t* indexes = (uint16_t*) min_indexes;
 	unsigned int min = values[0];
-	unsigned int lowest_index = indexes[0];
 	unsigned int vector_index = 0;
 	unsigned int sad_index = indexes[0];
 
@@ -97,13 +96,11 @@ static void set_motion_vectors(struct macroblock* mb, __m128i* min_values, __m12
 		if (values[i] < min)
 		{
 			min = values[i];
-			lowest_index = indexes[i];
 			vector_index = i;
 			sad_index = indexes[i];
 		}
-		else if (values[i] == min && indexes[i] < lowest_index)
+		else if (values[i] == min && indexes[i] < sad_index)
 		{
-			lowest_index = indexes[i];
 			vector_index = i;
 			sad_index = indexes[i];
 		}
