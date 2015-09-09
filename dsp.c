@@ -60,28 +60,28 @@ static void dct_1d(float *in_data, float *out_data)
 
 	for (i = 0; i < 8; i += 4)
 	{
-		
         v2 = _mm256_load_ps(&(dctlookup_trans[i*8]));
-        vres = _mm256_dp_ps(v1, v2, 0b11110001);
+        vres = _mm256_mul_ps(v1, v2);
         _mm256_store_ps((float*)&temp, vres);
-        out_data[i] = temp[0] + temp[4];
+        out_data[i] = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
         
         v2 = _mm256_load_ps(&(dctlookup_trans[(i+1)*8]));
-        vres = _mm256_dp_ps(v1, v2, 0b11110001);
+        vres = _mm256_mul_ps(v1, v2);
         _mm256_store_ps((float*)&temp, vres);
-        out_data[i+1] = temp[0] + temp[4];
+        out_data[i+1] = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
         
         v2 = _mm256_load_ps(&(dctlookup_trans[(i+2)*8]));
-        vres = _mm256_dp_ps(v1, v2, 0b11110001);
+        vres = _mm256_mul_ps(v1, v2);
         _mm256_store_ps((float*)&temp, vres);
-        out_data[i+2] = temp[0] + temp[4];
+        out_data[i+2] = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
         
         v2 = _mm256_load_ps(&(dctlookup_trans[(i+3)*8]));
-        vres = _mm256_dp_ps(v1, v2, 0b11110001);
+        vres = _mm256_mul_ps(v1, v2);
         _mm256_store_ps((float*)&temp, vres);
-        out_data[i+3] = temp[0] + temp[4];
+        out_data[i+3] = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
     }
 }
+
 
 static void idct_1d(float *in_data, float *out_data)
 {
@@ -97,27 +97,25 @@ static void idct_1d(float *in_data, float *out_data)
     
 	for (i = 0; i < 8; i += 4)
 	{
-		
-        v2 = _mm256_load_ps(&(dctlookup[i]));
-        vres = _mm256_dp_ps(v1, v2, 0b11110001);
+		v2 = _mm256_load_ps(&(dctlookup[i]));
+        vres = _mm256_mul_ps(v1, v2);
         _mm256_store_ps((float*)&temp, vres);
-        out_data[i] = temp[0] + temp[4];
+        out_data[i] = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
         
         v2 = _mm256_load_ps(&(dctlookup[i+1]));
-        vres = _mm256_dp_ps(v1, v2, 0b11110001);
+        vres = _mm256_mul_ps(v1, v2);
         _mm256_store_ps((float*)&temp, vres);
-        out_data[i+1] = temp[0] + temp[4];
+        out_data[i+1] = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
         
         v2 = _mm256_load_ps(&(dctlookup[i+2]));
-        vres = _mm256_dp_ps(v1, v2, 0b11110001);
+        vres = _mm256_mul_ps(v1, v2);
         _mm256_store_ps((float*)&temp, vres);
-        out_data[i+2] = temp[0] + temp[4];
+        out_data[i+2] = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
         
-        v2 = _mm256_load_ps(&(dctlookup[i+3]));
-        vres = _mm256_dp_ps(v1, v2, 0b11110001);
+        v2 = _mm256_load_ps(&(dctlookup[(i+3)]));
+        vres = _mm256_mul_ps(v1, v2);
         _mm256_store_ps((float*)&temp, vres);
-        out_data[i+3] = temp[0] + temp[4];
-  
+        out_data[i+3] = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
 	}
 }
 
