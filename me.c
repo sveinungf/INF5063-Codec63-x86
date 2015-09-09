@@ -106,8 +106,8 @@ static void set_motion_vectors(struct macroblock* mb, __m128i* min_values, __m12
 		}
 	}
 
-	unsigned int six = sad_index % 4;
-	unsigned int siy = sad_index / 4;
+	unsigned int six = sad_index % 5;
+	unsigned int siy = sad_index / 5;
 
 	mb->mv_x = left + six*8 + vector_index - mx;
 	mb->mv_y = top + siy - my;
@@ -151,17 +151,17 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   const __m128i all_ones = _mm_set1_epi16(0x7FFF); // TODO: rename
   const __m128i all_zeros = _mm_setzero_si128();
   const __m128i incrementor = _mm_set1_epi16(1);
-  const __m128i row_incrementor = _mm_set1_epi16(4);
-  __m128i counter_left = all_zeros;
+  const __m128i row_incrementor = _mm_set1_epi16(5);
+
+  __m128i counter = all_zeros;
   __m128i sad_min_values_left = all_ones;
   __m128i sad_min_indexes_left = all_zeros;
-  __m128i counter_right = all_zeros;
   __m128i sad_min_values_right = all_ones;
   __m128i sad_min_indexes_right = all_zeros;
 
   for (y = top; y < bottom; ++y)
   {
-	  __m128i start_counter = counter_left;
+	  __m128i start_counter = counter;
 
 	x = left;
 
@@ -174,13 +174,13 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
 		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
-		__m128i blended = _mm_blendv_epi8(all_zeros, counter_left, cmpgt);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
 		sad_min_indexes_left = _mm_max_epi16(sad_min_indexes_left, blended);
-
-		counter_left = _mm_add_epi16(counter_left, incrementor);
 
 		x += 8;
 	}
+
+	counter = _mm_add_epi16(counter, incrementor);
 
     for (; x < right; x+=8)
     {
@@ -191,17 +191,15 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
 		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
-		__m128i blended = _mm_blendv_epi8(all_zeros, counter_left, cmpgt);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
 		sad_min_indexes_left = _mm_max_epi16(sad_min_indexes_left, blended);
-
-		counter_left = _mm_add_epi16(counter_left, incrementor);
 
 		cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
 		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
-		blended = _mm_blendv_epi8(all_zeros, counter_right, cmpgt);
+		blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
 		sad_min_indexes_right = _mm_max_epi16(sad_min_indexes_right, blended);
 
-		counter_right = _mm_add_epi16(counter_right, incrementor);
+		counter = _mm_add_epi16(counter, incrementor);
     }
 
     if (doright)
@@ -213,18 +211,15 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
 		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
-		__m128i blended = _mm_blendv_epi8(all_zeros, counter_right, cmpgt);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
 		sad_min_indexes_right = _mm_max_epi16(sad_min_indexes_right, blended);
-
-		counter_right = _mm_add_epi16(counter_right, incrementor);
     }
 
-    counter_left = _mm_add_epi16(start_counter, row_incrementor);
-    counter_right = _mm_add_epi16(start_counter, row_incrementor);
+    counter = _mm_add_epi16(start_counter, row_incrementor);
   }
 
-  set_motion_vectors(left_mb, &sad_min_values_left, &sad_min_indexes_left, left, top, mx, my);
-  set_motion_vectors(right_mb, &sad_min_values_right, &sad_min_indexes_right, left, top, mx, my);
+  set_motion_vectors(left_mb, &sad_min_values_left, &sad_min_indexes_left, doleft ? left : left-8, top, mx, my);
+  set_motion_vectors(right_mb, &sad_min_values_right, &sad_min_indexes_right, left-8, top, mx, my);
 
   /* Here, there should be a threshold on SAD that checks if the motion vector
        is cheaper than intraprediction. We always assume MV to be beneficial */
