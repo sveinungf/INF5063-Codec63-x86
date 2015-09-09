@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -mavx -O3 -Wall -g -pg
+CFLAGS = -march=native -O3 -Wall -g -pg #-fprofile-arcs -ftest-coverage
 LDFLAGS = -lm
 
 all: c63enc #c63dec c63pred

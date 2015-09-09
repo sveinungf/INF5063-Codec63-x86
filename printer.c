@@ -1,9 +1,32 @@
+#include <inttypes.h>
+#include <stdio.h>
+
 #include "printer.h"
 
-void print128_num(__m128i var)
+void print_mm128i_as_uint8(const char* text, __m128i var)
 {
-    uint16_t *val = (uint16_t*) &var;
-    printf("Numerical: %i %i %i %i %i %i %i %i \n",
-           val[0], val[1], val[2], val[3], val[4], val[5],
-           val[6], val[7]);
+	uint8_t* val = (uint8_t*) &var;
+	printf("%s", text);
+
+	int i;
+	for (i = 0; i < 16; ++i)
+	{
+		printf("%i ", val[i]);
+	}
+
+	puts("");
+}
+
+void print_mm128i_as_uint16(const char* text, __m128i var)
+{
+    uint16_t* val = (uint16_t*) &var;
+    printf("%s", text);
+
+    int i;
+    for (i = 0; i < 8; ++i)
+    {
+    	printf("%i ", val[i]);
+    }
+
+    puts("");
 }

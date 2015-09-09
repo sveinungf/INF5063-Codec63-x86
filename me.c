@@ -8,16 +8,118 @@
 #include <stdlib.h>
 #include <string.h>
 #include <immintrin.h>
+#include <stdbool.h>
 
 #include "dsp.h"
 #include "me.h"
 
+static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result)
+{
+	const uint8_t* ref_pointer = ref;
+	const uint8_t* orig_pointer = orig;
+
+	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+	__m128i orig_pixels = _mm_loadl_epi64((void const*)(orig_pointer));
+
+	__m128i row_sads1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
+	__m128i row_sads2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
+
+	unsigned int block_row;
+
+	// Counting down to zero creates a simpler loop termination condition
+	for (block_row = 7; block_row--; )
+	{
+		ref_pointer += stride;
+		orig_pointer += stride;
+
+		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+		orig_pixels = _mm_loadl_epi64((void const*)(orig_pointer));
+
+		// Left block
+		row_sads1 = _mm_add_epi16(row_sads1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
+		row_sads2 = _mm_add_epi16(row_sads2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
+	}
+
+	*result = _mm_add_epi16(row_sads1, row_sads2);
+}
+
+static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result1, __m128i* const result2)
+{
+	const uint8_t* ref_pointer = ref;
+	const uint8_t* orig_pointer = orig;
+
+	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+	__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+
+	// Left block
+	__m128i row_sads_left1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
+	__m128i row_sads_left2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
+
+	// Right block
+	__m128i row_sads_right1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010);
+	__m128i row_sads_right2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111);
+
+	unsigned int block_row;
+
+	for (block_row = 7; block_row--; )
+	{
+		ref_pointer += stride;
+		orig_pointer += stride;
+
+		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
+		orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+
+		// Left block
+		row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
+		row_sads_left2 = _mm_add_epi16(row_sads_left2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
+
+		// Right block
+		row_sads_right1 = _mm_add_epi16(row_sads_right1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010));
+		row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111));
+	}
+
+	*result1 = _mm_add_epi16(row_sads_left1, row_sads_left2);
+	*result2 = _mm_add_epi16(row_sads_right1, row_sads_right2);
+}
+
+static void set_motion_vectors(struct macroblock* mb, __m128i* min_values, __m128i* min_indexes, int left, int top, int mx, int my)
+{
+	uint16_t* values = (uint16_t*) min_values;
+	uint16_t* indexes = (uint16_t*) min_indexes;
+	unsigned int min = values[0];
+	unsigned int vector_index = 0;
+	unsigned int sad_index = indexes[0];
+
+	unsigned int i;
+	for (i = 1; i < 8; ++i)
+	{
+		if (values[i] < min)
+		{
+			min = values[i];
+			vector_index = i;
+			sad_index = indexes[i];
+		}
+		else if (values[i] == min && indexes[i] < sad_index)
+		{
+			vector_index = i;
+			sad_index = indexes[i];
+		}
+	}
+
+	unsigned int six = sad_index % 5;
+	unsigned int siy = sad_index / 5;
+
+	mb->mv_x = left + six*8 + vector_index - mx;
+	mb->mv_y = top + siy - my;
+}
+
 /* Motion estimation for 8x8 block */
 static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
-    uint8_t *orig, uint8_t *ref, int color_component)
+    uint8_t *orig, uint8_t *ref, int color_component, int doleft, int doright)
 {
-  struct macroblock *mb =
-    &cm->curframe->mbs[color_component][mb_y*cm->padw[color_component]/8+mb_x];
+  int mb_index = mb_y*cm->padw[color_component]/8 + mb_x;
+  struct macroblock *left_mb = &cm->curframe->mbs[color_component][mb_index];
+  struct macroblock *right_mb = &cm->curframe->mbs[color_component][mb_index + 1];
 
   int range = cm->me_search_range;
 
@@ -39,77 +141,135 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   if (right > (w - 8)) { right = w - 8; }
   if (bottom > (h - 8)) { bottom = h - 8; }
 
-  int x, y, block_row;
+  int x, y;
 
   int mx = mb_x * 8;
   int my = mb_y * 8;
 
-  int best_sad = INT_MAX;
-  uint8_t* orig_block = orig + my*w+mx;
+  const uint8_t* const orig_pointer = orig + mx + w*my;
+
+  const __m128i m128i_epi16_max = _mm_set1_epi16(0x7FFF);
+  const __m128i all_zeros = _mm_setzero_si128();
+  const __m128i incrementor = _mm_set1_epi16(1);
+  const __m128i row_incrementor = _mm_set1_epi16(5);
+
+  __m128i counter = all_zeros;
+  __m128i sad_min_values_left = m128i_epi16_max;
+  __m128i sad_min_indexes_left = all_zeros;
+  __m128i sad_min_values_right = m128i_epi16_max;
+  __m128i sad_min_indexes_right = all_zeros;
 
   for (y = top; y < bottom; ++y)
   {
-    for (x = left; x < right; x+=8)
+	  __m128i start_counter = counter;
+
+	x = left;
+
+	if (doleft)
+	{
+		uint8_t* ref_pointer = ref + x + w*y;
+
+		__m128i next_min_left;
+		sad_block_8x8(orig_pointer, ref_pointer, w, &next_min_left);
+
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
+		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
+		sad_min_indexes_left = _mm_max_epi16(sad_min_indexes_left, blended);
+
+		x += 8;
+	}
+
+	counter = _mm_add_epi16(counter, incrementor);
+
+    for (; x < right; x+=8)
     {
-    	__m128i row_sads_left = _mm_setzero_si128();
-		__m128i row_sads_right = _mm_setzero_si128();
+    	uint8_t* ref_pointer = ref + x + w*y;
 
-		for (block_row = 0; block_row < 8; ++block_row)
-		{
-			__m128i ref_pixels = _mm_loadu_si128((void const*)(ref + y*w+x+(block_row*w)));
-			__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_block + (block_row*w)));
+    	__m128i next_min_left, next_min_right;
+    	sad_block_2x8x8(orig_pointer, ref_pointer, w, &next_min_left, &next_min_right);
 
-			row_sads_left = _mm_add_epi16(row_sads_left, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0));
-			row_sads_right = _mm_add_epi16(row_sads_right, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 5));
-		}
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
+		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
+		sad_min_indexes_left = _mm_max_epi16(sad_min_indexes_left, blended);
 
-		__m128i sad_min_and_index = _mm_minpos_epu16(_mm_add_epi16(row_sads_left, row_sads_right));
-		int sad_min = _mm_extract_epi16(sad_min_and_index, 0);
+		cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
+		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
+		blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
+		sad_min_indexes_right = _mm_max_epi16(sad_min_indexes_right, blended);
 
-		if (sad_min < best_sad)
-		{
-			int sad_index = _mm_extract_epi16(sad_min_and_index, 1);
-			mb->mv_x = (x + sad_index) - mx;
-			mb->mv_y = y - my;
-			best_sad = sad_min;
-		}
+		counter = _mm_add_epi16(counter, incrementor);
     }
+
+    if (doright)
+    {
+    	uint8_t* ref_pointer = ref + x + w*y;
+
+    	__m128i next_min_right;
+    	sad_block_8x8(orig_pointer + 8, ref_pointer, w, &next_min_right);
+
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
+		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
+		sad_min_indexes_right = _mm_max_epi16(sad_min_indexes_right, blended);
+    }
+
+    counter = _mm_add_epi16(start_counter, row_incrementor);
   }
 
+  set_motion_vectors(left_mb, &sad_min_values_left, &sad_min_indexes_left, doleft ? left : left-8, top, mx, my);
+  set_motion_vectors(right_mb, &sad_min_values_right, &sad_min_indexes_right, left-8, top, mx, my);
+
   /* Here, there should be a threshold on SAD that checks if the motion vector
-     is cheaper than intraprediction. We always assume MV to be beneficial */
+       is cheaper than intraprediction. We always assume MV to be beneficial */
 
-  /* printf("Using motion vector (%d, %d) with SAD %d\n", mb->mv_x, mb->mv_y,
-     best_sad); */
-
-  mb->use_mv = 1;
+  left_mb->use_mv = 1;
+  right_mb->use_mv = 1;
 }
 
 void c63_motion_estimate(struct c63_common *cm)
 {
   /* Compare this frame with previous reconstructed frame */
   int mb_x, mb_y;
+  uint8_t* orig_Y = cm->curframe->orig->Y;
+  uint8_t* orig_U = cm->curframe->orig->U;
+  uint8_t* orig_V = cm->curframe->orig->V;
+  uint8_t* recons_Y = cm->refframe->recons->Y;
+  uint8_t* recons_U = cm->refframe->recons->U;
+  uint8_t* recons_V = cm->refframe->recons->V;
 
   /* Luma */
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
-    for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
+	me_block_8x8(cm, 0, mb_y, orig_Y, recons_Y, Y_COMPONENT, false, true);
+	me_block_8x8(cm, 1, mb_y, orig_Y, recons_Y, Y_COMPONENT, false, true);
+
+	unsigned int end = cm->mb_cols - 2;
+    for (mb_x = 2; mb_x < end; mb_x+=2)
     {
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->Y,
-          cm->refframe->recons->Y, Y_COMPONENT);
+      me_block_8x8(cm, mb_x, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, true);
     }
+
+    me_block_8x8(cm, end, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, false);
+    me_block_8x8(cm, end + 1, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, false);
   }
 
   /* Chroma */
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
-    for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
+	me_block_8x8(cm, 0, mb_y, orig_U, recons_U, U_COMPONENT, false, true);
+	me_block_8x8(cm, 0, mb_y, orig_V, recons_V, V_COMPONENT, false, true);
+
+	unsigned int end = (cm->mb_cols / 2) - 1;
+    for (mb_x = 1; mb_x < end; mb_x+=2)
     {
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->U,
-          cm->refframe->recons->U, U_COMPONENT);
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->V,
-          cm->refframe->recons->V, V_COMPONENT);
+      me_block_8x8(cm, mb_x, mb_y, orig_U, recons_U, U_COMPONENT, true, true);
+      me_block_8x8(cm, mb_x, mb_y, orig_V, recons_V, V_COMPONENT, true, true);
     }
+
+    me_block_8x8(cm, end, mb_y, orig_U, recons_U, U_COMPONENT, true, false);
+    me_block_8x8(cm, end, mb_y, orig_V, recons_V, V_COMPONENT, true, false);
   }
 }
 
