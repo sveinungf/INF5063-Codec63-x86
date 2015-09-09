@@ -40,7 +40,7 @@ static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, c
 		row_sads2 = _mm_add_epi16(row_sads2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
 	}
 
-	*result = _mm_minpos_epu16(_mm_add_epi16(row_sads1, row_sads2));
+	*result = _mm_add_epi16(row_sads1, row_sads2);
 }
 
 static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result1, __m128i* const result2)
@@ -78,8 +78,42 @@ static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref,
 		row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111));
 	}
 
-	*result1 = _mm_minpos_epu16(_mm_add_epi16(row_sads_left1, row_sads_left2));
-	*result2 = _mm_minpos_epu16(_mm_add_epi16(row_sads_right1, row_sads_right2));
+	*result1 = _mm_add_epi16(row_sads_left1, row_sads_left2);
+	*result2 = _mm_add_epi16(row_sads_right1, row_sads_right2);
+}
+
+static void set_motion_vectors(struct macroblock* mb, __m128i* min_values, __m128i* min_indexes, int left, int top, int mx, int my)
+{
+	uint16_t* values = (uint16_t*) min_values;
+	uint16_t* indexes = (uint16_t*) min_indexes;
+	unsigned int min = values[0];
+	unsigned int lowest_index = indexes[0];
+	unsigned int vector_index = 0;
+	unsigned int sad_index = indexes[0];
+
+	unsigned int i;
+	for (i = 1; i < 8; ++i)
+	{
+		if (values[i] < min)
+		{
+			min = values[i];
+			lowest_index = indexes[i];
+			vector_index = i;
+			sad_index = indexes[i];
+		}
+		else if (values[i] == min && indexes[i] < lowest_index)
+		{
+			lowest_index = indexes[i];
+			vector_index = i;
+			sad_index = indexes[i];
+		}
+	}
+
+	unsigned int six = sad_index % 4;
+	unsigned int siy = sad_index / 4;
+
+	mb->mv_x = left + six*8 + vector_index - mx;
+	mb->mv_y = top + siy - my;
 }
 
 /* Motion estimation for 8x8 block */
@@ -115,80 +149,88 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int mx = mb_x * 8;
   int my = mb_y * 8;
 
-  int best_sad_left = INT_MAX;
-  int best_sad_right = INT_MAX;
-
   const uint8_t* const orig_pointer = orig + mx + w*my;
-  __m128i left_results[4];
-  __m128i right_results[4];
-  int j, k;
+
+  const __m128i all_ones = _mm_set1_epi16(0x7FFF); // TODO: rename
+  const __m128i all_zeros = _mm_setzero_si128();
+  const __m128i incrementor = _mm_set1_epi16(1);
+  const __m128i row_incrementor = _mm_set1_epi16(4);
+  __m128i counter_left = all_zeros;
+  __m128i sad_min_values_left = all_ones;
+  __m128i sad_min_indexes_left = all_zeros;
+  __m128i counter_right = all_zeros;
+  __m128i sad_min_values_right = all_ones;
+  __m128i sad_min_indexes_right = all_zeros;
 
   for (y = top; y < bottom; ++y)
   {
+	  __m128i start_counter = counter_left;
+
 	x = left;
-	j = 0;
-	k = 0;
 
 	if (doleft)
 	{
 		uint8_t* ref_pointer = ref + x + w*y;
-		sad_block_8x8(orig_pointer, ref_pointer, w, &left_results[j]);
+
+		__m128i next_min_left;
+		sad_block_8x8(orig_pointer, ref_pointer, w, &next_min_left);
+
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
+		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter_left, cmpgt);
+		sad_min_indexes_left = _mm_max_epi16(sad_min_indexes_left, blended);
+
+		counter_left = _mm_add_epi16(counter_left, incrementor);
 
 		x += 8;
-		++j;
 	}
 
     for (; x < right; x+=8)
     {
     	uint8_t* ref_pointer = ref + x + w*y;
-    	sad_block_2x8x8(orig_pointer, ref_pointer, w, &left_results[j], &right_results[k]);
 
-		++j;
-		++k;
+    	__m128i next_min_left, next_min_right;
+    	sad_block_2x8x8(orig_pointer, ref_pointer, w, &next_min_left, &next_min_right);
+
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
+		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter_left, cmpgt);
+		sad_min_indexes_left = _mm_max_epi16(sad_min_indexes_left, blended);
+
+		counter_left = _mm_add_epi16(counter_left, incrementor);
+
+		cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
+		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
+		blended = _mm_blendv_epi8(all_zeros, counter_right, cmpgt);
+		sad_min_indexes_right = _mm_max_epi16(sad_min_indexes_right, blended);
+
+		counter_right = _mm_add_epi16(counter_right, incrementor);
     }
 
     if (doright)
     {
     	uint8_t* ref_pointer = ref + x + w*y;
-    	sad_block_8x8(orig_pointer + 8, ref_pointer, w, &right_results[k]);
 
-    	++k;
+    	__m128i next_min_right;
+    	sad_block_8x8(orig_pointer + 8, ref_pointer, w, &next_min_right);
+
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
+		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
+		__m128i blended = _mm_blendv_epi8(all_zeros, counter_right, cmpgt);
+		sad_min_indexes_right = _mm_max_epi16(sad_min_indexes_right, blended);
+
+		counter_right = _mm_add_epi16(counter_right, incrementor);
     }
 
-    int i;
-
-    for (i = 0; i < j; ++i)
-    {
-    	int sad_min = _mm_extract_epi16(left_results[i], 0);
-
-    	if (sad_min < best_sad_left)
-    	{
-    		int sad_index = _mm_extract_epi16(left_results[i], 1);
-    		left_mb->mv_x = left + i*8 + sad_index - mx;
-    		left_mb->mv_y = y - my;
-    		best_sad_left = sad_min;
-    	}
-    }
-
-    for (i = 0; i < k; ++i)
-    {
-    	int sad_min = _mm_extract_epi16(right_results[i], 0);
-
-    	if (sad_min < best_sad_right)
-    	{
-    		int sad_index = _mm_extract_epi16(right_results[i], 1);
-    		right_mb->mv_x = left + i*8 + sad_index - mx;
-    		right_mb->mv_y = y - my;
-    		best_sad_right = sad_min;
-    	}
-    }
+    counter_left = _mm_add_epi16(start_counter, row_incrementor);
+    counter_right = _mm_add_epi16(start_counter, row_incrementor);
   }
 
-  /* Here, there should be a threshold on SAD that checks if the motion vector
-     is cheaper than intraprediction. We always assume MV to be beneficial */
+  set_motion_vectors(left_mb, &sad_min_values_left, &sad_min_indexes_left, left, top, mx, my);
+  set_motion_vectors(right_mb, &sad_min_values_right, &sad_min_indexes_right, left, top, mx, my);
 
-  /* printf("Using motion vector (%d, %d) with SAD %d\n", left_mb->mv_x, mb->mv_y,
-     best_sad); */
+  /* Here, there should be a threshold on SAD that checks if the motion vector
+       is cheaper than intraprediction. We always assume MV to be beneficial */
 
   left_mb->use_mv = 1;
   right_mb->use_mv = 1;
