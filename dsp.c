@@ -107,12 +107,12 @@ static void scale_block(float *in_data, float *out_data)
 	
 	__m256 av1 = _mm256_set1_ps(ISQRT2);
 	__m256 av2 = _mm256_set1_ps(1.0f);
-	__m256 au = _mm256_load_ps(&test2);
+	__m256 au = _mm256_load_ps((float*) &test2);
 	
 	v_temp = av1;
 	for (v = 0; v < 8; v += 4)
 	{
-		v_in = _mm256_load_ps(&in_data[v*8]);
+		v_in = _mm256_load_ps((float*) &in_data[v*8]);
 		v_res = _mm256_mul_ps(v_in, au);
 		v_res = _mm256_mul_ps(v_res, v_temp);
 		_mm256_store_ps(&out_data[v*8], v_res);
@@ -143,41 +143,49 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 	int zigzag, i;
 	
 	float adct[8] __attribute__((aligned(32)));
-
-	__m128i quants;
-
-	__m256d q_tbl, vd_res, v_pd;
-
-	__m256 v_res, v_dct;
+	
+	__m128i quants;	
+	__m128 temp1, temp2;
+	
+	__m256 v_res, v_dct, q_tbl;
 	__m256 v_temp = _mm256_set1_ps(0.25f);
-
+	
 	for (zigzag = 0; zigzag < 64; zigzag += 8)
 	{
 		for(i = 0; i < 8; ++i)
 		{
 			adct[i] = in_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]];
 		}
-
-		quants = _mm_loadu_si128(&quant_tbl[zigzag]);
-
-		v_dct = _mm256_load_ps(&adct);
+		
+		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
+		
+		v_dct = _mm256_load_ps((float*) &adct);
 		v_res = _mm256_mul_ps(v_dct, v_temp);
-
-		v_pd = _mm256_cvtps_pd(_mm256_castps256_ps128(v_res));
-		q_tbl = _mm256_cvtepi32_pd(_mm_cvtepu8_epi32(quants));
-		vd_res = _mm256_div_pd(v_pd, q_tbl);
-		_mm_store_ps(&out_data[zigzag], _mm256_cvtpd_ps(vd_res));
-
-		v_pd = _mm256_cvtps_pd(_mm256_extractf128_ps(v_res, 0b00000001));
-		q_tbl = _mm256_cvtepi32_pd(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
-		vd_res = _mm256_div_pd(v_pd, q_tbl);
-		_mm_store_ps(&out_data[zigzag+4], _mm256_cvtpd_ps(vd_res));
-
+		
+		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
+		temp2 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
+		
+		q_tbl = _mm256_insertf128_ps(_mm256_castps128_ps256(temp1), temp2, 0b00000001);
+		v_res = _mm256_div_ps(v_res, q_tbl);
+		_mm256_store_ps(&out_data[zigzag], v_res);
+		
 		for(i = 0; i < 8; ++i)
 		{
 			out_data[zigzag+i] = round(out_data[zigzag+i]);
 		}
 	}
+	/*
+	for (zigzag = 0; zigzag < 64; ++zigzag)
+	{
+		uint8_t u = zigzag_U[zigzag];
+		uint8_t v = zigzag_V[zigzag];
+
+		float dct = in_data[v*8+u];
+
+		// Zig-zag and quantize //
+		out_data[zigzag] = (float) round((dct / 4.0) / quant_tbl[zigzag]); //_mm_cvtepi8_epi16/32
+	}
+	*/
 }
 			
 static void dequantize_block(float *in_data, float *out_data,
@@ -206,8 +214,8 @@ static void dequantize_block(float *in_data, float *out_data,
 			v_index[i] = (zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i];
 		}
 		
-		v_dct = _mm256_load_ps(&in_data[zigzag]);
-		quants = _mm_loadu_si128(&quant_tbl[zigzag]);
+		v_dct = _mm256_load_ps((float*) &in_data[zigzag]);
+		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
 		
 		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		temp2 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
@@ -215,7 +223,7 @@ static void dequantize_block(float *in_data, float *out_data,
 		q_tbl = _mm256_insertf128_ps(_mm256_castps128_ps256(temp1), temp2, 0b00000001);
 		v_res = _mm256_mul_ps(v_dct, q_tbl);
 		v_res = _mm256_mul_ps(v_res, v_temp);
-		_mm256_store_ps(&temp, v_res);
+		_mm256_store_ps((float*) &temp, v_res);
 
 		for(i = 0; i < 8; ++i)
 		{
