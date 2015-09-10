@@ -17,7 +17,6 @@ static void transpose_block(float *in_data, float *out_data)
 
     __m128 row1[2], row2[2], row3[2], row4[2];
     
-    float out_data2[64];
     int k;
     for(i = 0; i < 8; i +=4 )
     {
@@ -101,7 +100,7 @@ static void dct_1d_general(float* in_data, float* out_data, float lookup[64])
 
 static void scale_block(float *in_data, float *out_data)
 {
-	int u, v;
+	int v;
 	
 	__m256 v_in, v_res, v_temp;
 	
