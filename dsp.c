@@ -193,16 +193,11 @@ static void dequantize_block(float *in_data, float *out_data,
 {
 	int zigzag, i;
 	
-	
-	//int v_index[8] __attribute__((aligned(32)));
 	float temp[8] __attribute__((aligned(32)));
 	
 	__m128i quants;	
 	
-	__m256d vd_res, v_pd;
-	
-	__m128 temp1;
-	__m128 temp2;
+	__m128 temp1, temp2;
 	
 	__m256 v_res, v_dct, q_tbl;
 	__m256 v_temp = _mm256_set1_ps(0.25f);
