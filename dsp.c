@@ -194,7 +194,7 @@ static void dequantize_block(float *in_data, float *out_data,
 	int zigzag, i;
 	
 	
-	int v_index[8] __attribute__((aligned(32)));
+	//int v_index[8] __attribute__((aligned(32)));
 	float temp[8] __attribute__((aligned(32)));
 	
 	__m128i quants;	
@@ -208,12 +208,7 @@ static void dequantize_block(float *in_data, float *out_data,
 	__m256 v_temp = _mm256_set1_ps(0.25f);
 	
 	for (zigzag = 0; zigzag < 64; zigzag += 8)
-	{
-		for(i = 0; i < 8; ++i)
-		{
-			v_index[i] = (zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i];
-		}
-		
+	{		
 		v_dct = _mm256_load_ps((float*) &in_data[zigzag]);
 		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
 		
@@ -227,7 +222,7 @@ static void dequantize_block(float *in_data, float *out_data,
 
 		for(i = 0; i < 8; ++i)
 		{
-			out_data[v_index[i]] = (float)round(temp[i]);
+			out_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]] = (float)round(temp[i]);
 		}
 	}
 	/*
