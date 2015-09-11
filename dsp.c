@@ -9,7 +9,6 @@
 #include <immintrin.h>
 #include <xmmintrin.h>
 
-static float test2[8] __attribute__((aligned(32))) = {ISQRT2, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
 
 static void transpose_block(float *in_data, float *out_data)
 {
@@ -100,51 +99,42 @@ static void dct_1d_general(float* in_data, float* out_data, float lookup[64])
 
 static void scale_block(float *in_data, float *out_data)
 {
-		
+	int v;
+	
 	__m256 v_in, v_res;
 	
 	static float v_au[8] __attribute__((aligned(32))) = {ISQRT2, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
 	__m256 au = _mm256_load_ps((float*) &v_au);
+	
 	__m256 av = _mm256_set1_ps(ISQRT2);
+	
 	
 	v_in = _mm256_load_ps(&in_data[0]);
 	v_res = _mm256_mul_ps(v_in, au);
 	v_res = _mm256_mul_ps(v_res, av);
 	_mm256_store_ps(&out_data[0], v_res);
-
-	v_in = _mm256_load_ps(&in_data[8]);
-	v_res = _mm256_mul_ps(v_in, au);
-	_mm256_store_ps(&out_data[8], v_res);
 	
-	v_in = _mm256_load_ps(&in_data[16]);
-	v_res = _mm256_mul_ps(v_in, au);
-	_mm256_store_ps(&out_data[16], v_res);
-	
-	
-	v_in = _mm256_load_ps(&in_data[24]);
-	v_res = _mm256_mul_ps(v_in, au);
-	_mm256_store_ps(&out_data[24], v_res);
+	for (v = 1; v < 7; v += 3)
+	{
+		v_in = _mm256_load_ps(&in_data[v*8]);
+		v_res = _mm256_mul_ps(v_in, au);
+		_mm256_store_ps(&out_data[v*8], v_res);
+		
+		v_in = _mm256_load_ps(&in_data[(v+1)*8]);
+		v_res = _mm256_mul_ps(v_in, au);
+		_mm256_store_ps(&out_data[(v+1)*8], v_res);
 		
 		
-	v_in = _mm256_load_ps(&in_data[32]);
-	v_res = _mm256_mul_ps(v_in, au);
-	_mm256_store_ps(&out_data[32], v_res);
-		
-		
-	v_in = _mm256_load_ps(&in_data[40]);
-	v_res = _mm256_mul_ps(v_in, au);
-	_mm256_store_ps(&out_data[40], v_res);
-		
-		
-	v_in = _mm256_load_ps(&in_data[48]);
-	v_res = _mm256_mul_ps(v_in, au);
-	_mm256_store_ps(&out_data[48], v_res);
+		v_in = _mm256_load_ps(&in_data[(v+2)*8]);
+		v_res = _mm256_mul_ps(v_in, au);
+		_mm256_store_ps(&out_data[(v+2)*8], v_res);
+	}
 	
 	v_in = _mm256_load_ps(&in_data[56]);
 	v_res = _mm256_mul_ps(v_in, au);
 	_mm256_store_ps(&out_data[56], v_res);
-	
 }
+
 
 static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
