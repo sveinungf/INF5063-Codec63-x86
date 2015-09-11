@@ -141,7 +141,7 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
 	int zigzag, i;
 	
-	float dct_vals[8] __attribute__((aligned(32)));
+	float dct_values[8] __attribute__((aligned(32)));
 	
 	__m128i quants;	
 	__m128 temp1, temp2;
@@ -153,12 +153,12 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 	{
 		for(i = 0; i < 8; ++i)
 		{
-			dct_vals[i] = in_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]];
+			dct_values[i] = in_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]];
 		}
 		
 		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
 		
-		v_dct = _mm256_load_ps((float*) &dct_vals);
+		v_dct = _mm256_load_ps((float*) &dct_values);
 		v_res = _mm256_mul_ps(v_dct, v_temp);
 		
 		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
@@ -166,6 +166,7 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 		
 		q_tbl = _mm256_insertf128_ps(_mm256_castps128_ps256(temp1), temp2, 0b00000001);
 		v_res = _mm256_div_ps(v_res, q_tbl);
+		
 		_mm256_store_ps(&out_data[zigzag], v_res);
 		
 		for(i = 0; i < 8; ++i)
