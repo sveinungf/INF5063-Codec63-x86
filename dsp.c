@@ -46,50 +46,44 @@ static void transpose_block(float *in_data, float *out_data)
 
 static void dct_1d_general(float* in_data, float* out_data, float lookup[64])
 {
-	__m128 in128a = _mm_load_ps(in_data);
-	__m128 in128b = _mm_load_ps(in_data + 4);
-
-	__m256 in256aa = _mm256_insertf128_ps(_mm256_castps128_ps256(in128a), in128a, 1);
-	__m256 in256bb = _mm256_insertf128_ps(_mm256_castps128_ps256(in128b), in128b, 1);
-
 	__m256 current, dct_values, multiplied, sum;
 
-	current = _mm256_shuffle_ps(in256aa, in256aa, 0b00000000);
+	current = _mm256_broadcast_ss(in_data);
 	dct_values = _mm256_load_ps(lookup);
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = multiplied;
 
-	current = _mm256_shuffle_ps(in256aa, in256aa, 0b01010101);
+	current = _mm256_broadcast_ss(in_data + 1);
 	dct_values = _mm256_load_ps(lookup + 8);
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = _mm256_add_ps(sum, multiplied);
 
-	current = _mm256_shuffle_ps(in256aa, in256aa, 0b10101010);
+	current = _mm256_broadcast_ss(in_data + 2);
 	dct_values = _mm256_load_ps(lookup + 16);
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = _mm256_add_ps(sum, multiplied);
 
-	current = _mm256_shuffle_ps(in256aa, in256aa, 0b11111111);
+	current = _mm256_broadcast_ss(in_data + 3);
 	dct_values = _mm256_load_ps(lookup + 24);
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = _mm256_add_ps(sum, multiplied);
 
-	current = _mm256_shuffle_ps(in256bb, in256bb, 0b00000000);
+	current = _mm256_broadcast_ss(in_data + 4);
 	dct_values = _mm256_load_ps(lookup + 32);
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = _mm256_add_ps(sum, multiplied);
 
-	current = _mm256_shuffle_ps(in256bb, in256bb, 0b01010101);
+	current = _mm256_broadcast_ss(in_data + 5);
 	dct_values = _mm256_load_ps(lookup + 40);
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = _mm256_add_ps(sum, multiplied);
 
-	current = _mm256_shuffle_ps(in256bb, in256bb, 0b10101010);
+	current = _mm256_broadcast_ss(in_data + 6);
 	dct_values = _mm256_load_ps(lookup + 48);
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = _mm256_add_ps(sum, multiplied);
 
-	current = _mm256_shuffle_ps(in256bb, in256bb, 0b11111111);
+	current = _mm256_broadcast_ss(in_data + 7);
 	dct_values = _mm256_load_ps(lookup + 56);
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = _mm256_add_ps(sum, multiplied);
