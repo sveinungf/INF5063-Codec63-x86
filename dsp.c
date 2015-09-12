@@ -135,6 +135,50 @@ static void scale_block(float *in_data, float *out_data)
 	_mm256_store_ps(&out_data[56], v_res);
 }
 
+// Rounding half away from zero (equivalent to round() from math.h)
+// __m256 contains 8 floats, but to simplify the examples, only 4 will be shown
+// Initial values to be used in the examples:
+// [-12.49  -0.5   1.5   3.7]
+static __m256 c63_mm256_roundhalfawayfromzero_ps(const __m256 initial)
+{
+	const __m256 sign_mask = _mm256_set1_ps(-0.f);
+	const __m256 one_half = _mm256_set1_ps(0.5f);
+	const __m256 all_zeros = _mm256_setzero_ps();
+	const __m256 pos_one = _mm256_set1_ps(1.f);
+	const __m256 neg_one = _mm256_set1_ps(-1.f);
+
+	// Creates a mask based on the sign of the floats, true for negative floats
+	// Example: [true   true   false   false]
+	__m256 less_than_zero = _mm256_cmp_ps(initial, all_zeros, _CMP_LT_OQ);
+
+	// Returns the integer part of the floats
+	// Example: [-12.0   -0.0   1.0   3.0]
+	__m256 without_fraction = _mm256_round_ps(initial, (_MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC));
+
+	// Returns the fraction part of the floats
+	// Example: [-0.49   -0.5   0.5   0.7]
+	__m256 fraction = _mm256_sub_ps(initial, without_fraction);
+
+	// Absolute values of the fractions
+	// Example: [0.49   0.5   0.5   0.7]
+	__m256 fraction_abs = _mm256_andnot_ps(sign_mask, fraction);
+
+	// Compares abs(fractions) to 0.5, true if lower
+	// Example: [true   false   false   false]
+	__m256 less_than_one_half = _mm256_cmp_ps(fraction_abs, one_half, _CMP_LT_OQ);
+
+	// Blends 1.0 and -1.0 depending on the initial sign of the floats
+	// Example: [-1.0   -1.0   1.0   1.0]
+	__m256 signed_ones = _mm256_blendv_ps(pos_one, neg_one, less_than_zero);
+
+	// Blends the previous result with zeros depending on the fractions that are lower than 0.5
+	// Example: [0.0   -1.0   1.0   1.0]
+	__m256 to_add = _mm256_blendv_ps(signed_ones, all_zeros, less_than_one_half);
+
+	// Adds the previous result to the floats without fractions
+	// Example: [-12.0   -1.0   2.0   4.0]
+	return _mm256_add_ps(without_fraction, to_add);
+}
 
 static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
@@ -165,13 +209,9 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 		
 		q_tbl = _mm256_insertf128_ps(_mm256_castps128_ps256(temp1), temp2, 0b00000001);
 		v_res = _mm256_div_ps(v_res, q_tbl);
-		
-		_mm256_store_ps(&out_data[zigzag], v_res);
-		
-		for(i = 0; i < 8; ++i)
-		{
-			out_data[zigzag+i] = round(out_data[zigzag+i]);
-		}
+
+		v_res = c63_mm256_roundhalfawayfromzero_ps(v_res);
+		_mm256_store_ps(out_data + zigzag, v_res);
 	}
 	/*
 	for (zigzag = 0; zigzag < 64; ++zigzag)
