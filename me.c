@@ -178,8 +178,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
 		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
-		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
-		sad_min_indexes_left = _mm_max_epi16(sad_min_indexes_left, blended);
+		sad_min_indexes_left = _mm_blendv_epi8(sad_min_indexes_left, counter, cmpgt);
 
 		x += 8;
 	}
@@ -195,13 +194,11 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
 		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
-		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
-		sad_min_indexes_left = _mm_max_epi16(sad_min_indexes_left, blended);
+		sad_min_indexes_left = _mm_blendv_epi8(sad_min_indexes_left, counter, cmpgt);
 
 		cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
 		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
-		blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
-		sad_min_indexes_right = _mm_max_epi16(sad_min_indexes_right, blended);
+		sad_min_indexes_right = _mm_blendv_epi8(sad_min_indexes_right, counter, cmpgt);
 
 		counter = _mm_add_epi16(counter, incrementor);
     }
@@ -215,8 +212,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
 		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
-		__m128i blended = _mm_blendv_epi8(all_zeros, counter, cmpgt);
-		sad_min_indexes_right = _mm_max_epi16(sad_min_indexes_right, blended);
+		sad_min_indexes_right = _mm_blendv_epi8(sad_min_indexes_right, counter, cmpgt);
     }
 
     counter = _mm_add_epi16(start_counter, row_incrementor);
