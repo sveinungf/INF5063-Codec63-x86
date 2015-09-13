@@ -246,11 +246,13 @@ static void dequantize_block(float *in_data, float *out_data,
 		q_tbl = _mm256_insertf128_ps(_mm256_castps128_ps256(temp1), temp2, 0b00000001);
 		v_res = _mm256_mul_ps(v_dct, q_tbl);
 		v_res = _mm256_mul_ps(v_res, v_temp);
-		_mm256_store_ps((float*) &temp, v_res);
+
+		v_res = c63_mm256_roundhalfawayfromzero_ps(v_res);
+		_mm256_store_ps(temp, v_res);
 
 		for(i = 0; i < 8; ++i)
 		{
-			out_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]] = (float)round(temp[i]);
+			out_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]] = temp[i];
 		}
 	}
 	/*
