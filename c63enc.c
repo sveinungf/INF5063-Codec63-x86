@@ -251,8 +251,10 @@ int main(int argc, char **argv)
 
   /* Encode input frames */
   int numframes = 0;
-  uint64_t cycleCountBefore, cycleCountAfter;
+
+# ifdef SHOW_CYCLES
   uint64_t kCycleCountTotal = 0;
+# endif
 
   while (1)
   {
@@ -262,40 +264,37 @@ int main(int argc, char **argv)
 
     printf("Encoding frame %d, ", numframes);
 
-    cycleCountBefore = rdtsc();
+# ifdef SHOW_CYCLES
+    uint64_t cycleCountBefore = rdtsc();
     c63_encode_image(cm, image);
-    cycleCountAfter = rdtsc();
+    uint64_t cycleCountAfter = rdtsc();
+
+    uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
+    kCycleCountTotal += kCycleCount;
+    printf("%" PRIu64 "k cycles, ", kCycleCount);
+# else
+    c63_encode_image(cm, image);
+# endif
 
     free(image->Y);
     free(image->U);
     free(image->V);
     free(image);
 
-    uint64_t kCycleCount = (cycleCountAfter - cycleCountBefore)/1000;
-    kCycleCountTotal += kCycleCount;
-    printf("Done in %" PRIu64 "k cycles!\n", kCycleCount);
+    printf("Done!\n");
 
     ++numframes;
 
     if (limit_numframes && numframes >= limit_numframes) { break; }
   }
 
+# ifdef SHOW_CYCLES
   printf("-----------\n");
-  printf("Average CPU cycle count per frame: %" PRIu64 "\n", kCycleCountTotal/numframes);
+  printf("Average CPU cycle count per frame: %" PRIu64 "k\n", kCycleCountTotal/numframes);
+# endif
 
   fclose(outfile);
   fclose(infile);
-
-  //int i, j;
-  //for (i = 0; i < 2; ++i)
-  //{
-  //  printf("int freq[] = {");
-  //  for (j = 0; j < ARRAY_SIZE(frequencies[i]); ++j)
-  //  {
-  //    printf("%d, ", frequencies[i][j]);
-  //  }
-  //  printf("};\n");
-  //}
 
   return EXIT_SUCCESS;
 }
