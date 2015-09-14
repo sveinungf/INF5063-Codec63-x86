@@ -13,29 +13,21 @@
 #include "dsp.h"
 #include "me.h"
 
-static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result)
+static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, int stride, __m128i* const result)
 {
-	const uint8_t* ref_pointer = ref;
-	const uint8_t* orig_pointer = orig;
-
-	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-	__m128i orig_pixels = _mm_loadl_epi64((void const*)(orig_pointer));
+	__m128i ref_pixels = _mm_loadu_si128((void const*) ref);
+	__m128i orig_pixels = _mm_loadl_epi64((void const*) orig);
 
 	__m128i row_sads1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
 	__m128i row_sads2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
 
-	unsigned int block_row;
+	int offset;
 
-	// Counting down to zero creates a simpler loop termination condition
-	for (block_row = 7; block_row--; )
+	for (offset = stride; offset < 8*stride; offset += stride)
 	{
-		ref_pointer += stride;
-		orig_pointer += stride;
+		ref_pixels = _mm_loadu_si128((void const*) ref + offset);
+		orig_pixels = _mm_loadl_epi64((void const*) orig + offset);
 
-		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-		orig_pixels = _mm_loadl_epi64((void const*)(orig_pointer));
-
-		// Left block
 		row_sads1 = _mm_add_epi16(row_sads1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
 		row_sads2 = _mm_add_epi16(row_sads2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
 	}
@@ -43,13 +35,10 @@ static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, c
 	*result = _mm_add_epi16(row_sads1, row_sads2);
 }
 
-static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref, const int stride, __m128i* const result1, __m128i* const result2)
+static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref, int stride, __m128i* const result1, __m128i* const result2)
 {
-	const uint8_t* ref_pointer = ref;
-	const uint8_t* orig_pointer = orig;
-
-	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-	__m128i orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref));
+	__m128i orig_pixels = _mm_loadu_si128((void const*)(orig));
 
 	// Left block
 	__m128i row_sads_left1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
@@ -59,15 +48,12 @@ static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref,
 	__m128i row_sads_right1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010);
 	__m128i row_sads_right2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111);
 
-	unsigned int block_row;
+	int offset;
 
-	for (block_row = 7; block_row--; )
+	for (offset = stride; offset < 8*stride; offset += stride)
 	{
-		ref_pointer += stride;
-		orig_pointer += stride;
-
-		ref_pixels = _mm_loadu_si128((void const*)(ref_pointer));
-		orig_pixels = _mm_loadu_si128((void const*)(orig_pointer));
+		ref_pixels = _mm_loadu_si128((void const*)(ref + offset));
+		orig_pixels = _mm_loadu_si128((void const*)(orig + offset));
 
 		// Left block
 		row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
@@ -82,19 +68,19 @@ static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref,
 	*result2 = _mm_add_epi16(row_sads_right1, row_sads_right2);
 }
 
-static void set_motion_vectors(struct macroblock* const mb, const __m128i* const min_values, const __m128i* const min_indexes, const int left, const int top, const int mx, const int my)
+static void set_motion_vectors(const __m128i min_values, const __m128i min_indexes, struct macroblock* const mb, int left, int top, int mx, int my)
 {
 	uint16_t values[8] __attribute__((aligned(16)));
 	uint16_t indexes[8] __attribute__((aligned(16)));
 
-	_mm_store_si128((__m128i*) values, *min_values);
-	_mm_store_si128((__m128i*) indexes, *min_indexes);
+	_mm_store_si128((__m128i*) values, min_values);
+	_mm_store_si128((__m128i*) indexes, min_indexes);
 
-	unsigned int min = values[0];
-	unsigned int vector_index = 0;
-	unsigned int sad_index = indexes[0];
+	int min = values[0];
+	int vector_index = 0;
+	int sad_index = indexes[0];
 
-	unsigned int i;
+	int i;
 	for (i = 1; i < 8; ++i)
 	{
 		if (values[i] < min)
@@ -110,8 +96,8 @@ static void set_motion_vectors(struct macroblock* const mb, const __m128i* const
 		}
 	}
 
-	unsigned int six = sad_index % 5;
-	unsigned int siy = sad_index / 5;
+	int six = sad_index % 5;
+	int siy = sad_index / 5;
 
 	mb->mv_x = left + six*8 + vector_index - mx;
 	mb->mv_y = top + siy - my;
@@ -145,7 +131,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   if (right > (w - 8)) { right = w - 8; }
   if (bottom > (h - 8)) { bottom = h - 8; }
 
-  int x, y;
+  int y;
 
   int mx = mb_x * 8;
   int my = mb_y * 8;
@@ -167,7 +153,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   {
 	  __m128i start_counter = counter;
 
-	x = left;
+	int x = left;
 
 	if (doleft)
 	{
@@ -218,8 +204,8 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     counter = _mm_add_epi16(start_counter, row_incrementor);
   }
 
-  set_motion_vectors(left_mb, &sad_min_values_left, &sad_min_indexes_left, doleft ? left : left-8, top, mx, my);
-  set_motion_vectors(right_mb, &sad_min_values_right, &sad_min_indexes_right, left-8, top, mx, my);
+  set_motion_vectors(sad_min_values_left, sad_min_indexes_left, left_mb, doleft ? left : left-8, top, mx, my);
+  set_motion_vectors(sad_min_values_right, sad_min_indexes_right, right_mb, left-8, top, mx, my);
 
   /* Here, there should be a threshold on SAD that checks if the motion vector
        is cheaper than intraprediction. We always assume MV to be beneficial */
