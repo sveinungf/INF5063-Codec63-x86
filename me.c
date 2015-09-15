@@ -104,8 +104,8 @@ static void set_motion_vectors(const __m128i min_values, const __m128i min_index
 }
 
 /* Motion estimation for 8x8 block */
-static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
-    uint8_t *orig, uint8_t *ref, int color_component, int doleft, int doright)
+static void me_block_2x8x8(struct c63_common *cm, int mb_x, int mb_y,
+    uint8_t *orig, uint8_t *ref, int color_component)
 {
   int mb_index = mb_y*cm->padw[color_component]/8 + mb_x;
   struct macroblock *left_mb = &cm->curframe->mbs[color_component][mb_index];
@@ -135,6 +135,9 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
   int mx = mb_x * 8;
   int my = mb_y * 8;
+
+  int doleft = (mx - left) == range;
+  int doright = w > (right + 8); // 8 because 8x8 block
 
   const uint8_t* const orig_pointer = orig + mx + w*my;
 
@@ -228,32 +231,20 @@ void c63_motion_estimate(struct c63_common *cm)
   /* Luma */
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
-	me_block_8x8(cm, 0, mb_y, orig_Y, recons_Y, Y_COMPONENT, false, true);
-
-	int end = cm->mb_cols - 2;
-    for (mb_x = 2; mb_x < end; mb_x+=2)
+    for (mb_x = 0; mb_x < cm->mb_cols; mb_x+=2)
     {
-      me_block_8x8(cm, mb_x, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, true);
+      me_block_2x8x8(cm, mb_x, mb_y, orig_Y, recons_Y, Y_COMPONENT);
     }
-
-    me_block_8x8(cm, end, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, false);
   }
 
   /* Chroma */
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
-	me_block_8x8(cm, 0, mb_y, orig_U, recons_U, U_COMPONENT, false, true);
-	me_block_8x8(cm, 0, mb_y, orig_V, recons_V, V_COMPONENT, false, true);
-
-	int end = (cm->mb_cols / 2) - 1;
-    for (mb_x = 1; mb_x < end; mb_x+=2)
+    for (mb_x = 0; mb_x < cm->mb_cols / 2; mb_x+=2)
     {
-      me_block_8x8(cm, mb_x, mb_y, orig_U, recons_U, U_COMPONENT, true, true);
-      me_block_8x8(cm, mb_x, mb_y, orig_V, recons_V, V_COMPONENT, true, true);
+      me_block_2x8x8(cm, mb_x, mb_y, orig_U, recons_U, U_COMPONENT);
+      me_block_2x8x8(cm, mb_x, mb_y, orig_V, recons_V, V_COMPONENT);
     }
-
-    me_block_8x8(cm, end, mb_y, orig_U, recons_U, U_COMPONENT, true, false);
-    me_block_8x8(cm, end, mb_y, orig_V, recons_V, V_COMPONENT, true, false);
   }
 }
 
