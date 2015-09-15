@@ -176,9 +176,7 @@ static __m256 c63_mm256_roundhalfawayfromzero_ps(const __m256 initial)
 
 static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
-	int zigzag, i;
-	
-	float dct_values[8] __attribute__((aligned(32)));
+	int zigzag;
 	
 	__m128i quants;	
 	__m128 temp1, temp2;
