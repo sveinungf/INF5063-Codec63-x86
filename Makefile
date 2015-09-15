@@ -44,4 +44,4 @@ psnr-diff:
 cachegrind:
 	valgrind --tool=cachegrind --branch-sim=yes --cachegrind-out-file=temp/cachegrind.out ./c63enc -w 352 -h 288 -f 30 -o temp/test.c63 yuv/foreman.yuv
 
-test: clean c63enc encode gprof
+test: encode gprof
