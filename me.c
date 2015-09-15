@@ -13,13 +13,33 @@
 #include "dsp.h"
 #include "me.h"
 
+/*
+ * Calculates SAD values comparing one 8x8 block in the current frame to 8x8 blocks
+ * from 8 sequential starting points in the previous frame.
+ */
 static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, int stride, __m128i* const result)
 {
+	/*
+	 * Loads the first row from the blocks in the previous frame starting
+	 * from 8 sequential starting positions.
+	 */
 	__m128i ref_pixels = _mm_loadu_si128((void const*) ref);
+
+	// Loads the first row from the block in the current frame
 	__m128i orig_pixels = _mm_loadl_epi64((void const*) orig);
 
-	__m128i row_sads1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
-	__m128i row_sads2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
+	/*
+	 * Calculates SAD values comparing the first 4 bytes from the row in orig_pixels
+	 * to quadruplets from the 8 first sequential starting positions in ref_pixels.
+	 */
+	__m128i row_sads_left = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
+
+	/*
+	 * Calculates SAD values comparing the next 4 bytes from the row in orig_pixels
+	 * to quadruplets from 8 sequential starting positions in ref_pixels. The first
+	 * starting position in ref_pixels is offseted by 4 bytes.
+	 */
+	__m128i row_sads_right = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
 
 	int offset;
 
@@ -28,25 +48,31 @@ static void sad_block_8x8(const uint8_t* const orig, const uint8_t* const ref, i
 		ref_pixels = _mm_loadu_si128((void const*) ref + offset);
 		orig_pixels = _mm_loadl_epi64((void const*) orig + offset);
 
-		row_sads1 = _mm_add_epi16(row_sads1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
-		row_sads2 = _mm_add_epi16(row_sads2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
+		// Add every row to the current SAD values
+		row_sads_left = _mm_add_epi16(row_sads_left, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
+		row_sads_right = _mm_add_epi16(row_sads_right, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
 	}
 
-	*result = _mm_add_epi16(row_sads1, row_sads2);
+	// The sums of the left and right side values are the SAD values for the whole block
+	*result = _mm_add_epi16(row_sads_left, row_sads_right);
 }
 
+/*
+ * Calculates SAD values comparing TWO 8x8 blocks in the current frame to 8x8 blocks
+ * from 8 sequential starting points in the previous frame.
+ */
 static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref, int stride, __m128i* const result1, __m128i* const result2)
 {
 	__m128i ref_pixels = _mm_loadu_si128((void const*)(ref));
 	__m128i orig_pixels = _mm_loadu_si128((void const*)(orig));
 
-	// Left block
-	__m128i row_sads_left1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
-	__m128i row_sads_left2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
+	// First block
+	__m128i row_sads_1_left = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000);
+	__m128i row_sads_1_right = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101);
 
-	// Right block
-	__m128i row_sads_right1 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010);
-	__m128i row_sads_right2 = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111);
+	// Second block
+	__m128i row_sads_2_left = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010);
+	__m128i row_sads_2_right = _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111);
 
 	int offset;
 
@@ -55,19 +81,24 @@ static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref,
 		ref_pixels = _mm_loadu_si128((void const*)(ref + offset));
 		orig_pixels = _mm_loadu_si128((void const*)(orig + offset));
 
-		// Left block
-		row_sads_left1 = _mm_add_epi16(row_sads_left1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
-		row_sads_left2 = _mm_add_epi16(row_sads_left2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
+		// First block
+		row_sads_1_left = _mm_add_epi16(row_sads_1_left, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b000));
+		row_sads_1_right = _mm_add_epi16(row_sads_1_right, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b101));
 
-		// Right block
-		row_sads_right1 = _mm_add_epi16(row_sads_right1, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010));
-		row_sads_right2 = _mm_add_epi16(row_sads_right2, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111));
+		// Second block
+		row_sads_2_left = _mm_add_epi16(row_sads_2_left, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b010));
+		row_sads_2_right = _mm_add_epi16(row_sads_2_right, _mm_mpsadbw_epu8(ref_pixels, orig_pixels, 0b111));
 	}
 
-	*result1 = _mm_add_epi16(row_sads_left1, row_sads_left2);
-	*result2 = _mm_add_epi16(row_sads_right1, row_sads_right2);
+	*result1 = _mm_add_epi16(row_sads_1_left, row_sads_1_right);
+	*result2 = _mm_add_epi16(row_sads_2_left, row_sads_2_right);
 }
 
+/*
+ * Finds the x and y values for the macroblock with the lowest SAD value. If there are
+ * multiple macroblocks with the same lowest SAD value, the one with the lowest index
+ * will be used.
+ */
 static void get_sad_index(const __m128i min_values, const __m128i min_indexes, int* sad_index_x, int* sad_index_y, int index_vector_row_length)
 {
 	uint16_t values[8] __attribute__((aligned(16)));
@@ -194,10 +225,7 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 
 			__m128i next_min_block1;
 
-			/*
-			 * Calculates SAD values comparing one 8x8 block in the current frame to 8x8 blocks
-			 * from 8 sequential starting points in the previous frame.
-			 */
+			// This creates a vector containing 8 SAD values
 			sad_block_8x8(orig_pointer, ref_pointer, w, &next_min_block1);
 
 			// Creates a mask from comparing the previous result and the current minimum values
@@ -229,10 +257,7 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 
 			__m128i next_min_block1, next_min_block2;
 
-			/*
-			 * Calculates SAD values comparing TWO 8x8 blocks in the current frame to 8x8 blocks
-			 * from 8 sequential starting points in the previous frame.
-			 */
+			// This creates two vectors with each containing 8 SAD values
 			sad_block_2x8x8(orig_pointer, ref_pointer, w, &next_min_block1, &next_min_block2);
 
 			// The rest here is similar to the commented code above
