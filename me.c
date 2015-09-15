@@ -159,9 +159,13 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 
 	const __m128i m128i_epi16_max = _mm_set1_epi16(0x7FFF);
 	const __m128i all_zeros = _mm_setzero_si128();
+
+	// The incrementors are used to keep track of the indexes of the current minimum values
 	const __m128i incrementor = _mm_set1_epi16(1);
+	// Plus one because both macroblocks uses the same counter
 	const __m128i row_incrementor = _mm_set1_epi16(5);
 
+	// The counter keeps track of which 8x8 region we currently have calculated a SAD value in
 	__m128i counter = all_zeros;
 	__m128i sad_min_values_block1 = m128i_epi16_max;
 	__m128i sad_min_indexes_block1 = all_zeros;
@@ -174,29 +178,58 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 	{
 		__m128i start_counter = counter;
 
+		/*
+		 * Test if the search range for macroblock 1 goes further left than the search range
+		 * for macroblock 2.
+		 */
 		if (mb1_left < mb2_left)
 		{
 			uint8_t* ref_pointer = ref + mb1_left + w * y;
 
 			__m128i next_min_block1;
+
+			/*
+			 * Calculates SAD values comparing one 8x8 block in the current frame to 8x8 blocks
+			 * from 8 sequential starting points in the previous frame.
+			 */
 			sad_block_8x8(orig_pointer, ref_pointer, w, &next_min_block1);
 
+			// Creates a mask from comparing the previous result and the current minimum values
 			__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_block1, next_min_block1);
+
+			// Select minimum from the previous result and the current minimum values
 			sad_min_values_block1 = _mm_min_epi16(sad_min_values_block1, next_min_block1);
+
+			/*
+			 * Updates the indexes for minimum SAD values.
+			 * If next_min_block had SAD values that were lower than those from sad_min_values,
+			 * the indexes for those values will be updated to the current counter.
+			 */
 			sad_min_indexes_block1 = _mm_blendv_epi8(sad_min_indexes_block1, counter, cmpgt);
 		}
 
+		// Incrementing the counter
 		counter = _mm_add_epi16(counter, incrementor);
 
 		int x;
 
+		/*
+		 * Iterates through the region which is in the search range for both macroblock 1 and
+		 * macroblock 2.
+		 */
 		for (x = mb2_left; x < mb1_right; x += 8)
 		{
 			uint8_t* ref_pointer = ref + x + w * y;
 
 			__m128i next_min_block1, next_min_block2;
+
+			/*
+			 * Calculates SAD values comparing TWO 8x8 blocks in the current frame to 8x8 blocks
+			 * from 8 sequential starting points in the previous frame.
+			 */
 			sad_block_2x8x8(orig_pointer, ref_pointer, w, &next_min_block1, &next_min_block2);
 
+			// The rest here is similar to the commented code above
 			__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_block1, next_min_block1);
 			sad_min_values_block1 = _mm_min_epi16(sad_min_values_block1, next_min_block1);
 			sad_min_indexes_block1 = _mm_blendv_epi8(sad_min_indexes_block1, counter, cmpgt);
@@ -208,6 +241,10 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 			counter = _mm_add_epi16(counter, incrementor);
 		}
 
+		/*
+		 * Test if the search range for macroblock 2 goes further right than the search range
+		 * for macroblock 1.
+		 */
 		if (mb2_right > mb1_right)
 		{
 			uint8_t* ref_pointer = ref + mb1_right + w * y;
@@ -229,6 +266,10 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 	int normalized_left = mb2_left - 8;
 	int sad_index_x, sad_index_y;
 
+	/*
+	 * Now we have 8 SAD values and their corresponding indexes. get_sad_index() finds the
+	 * x and y values for the first macroblock with the lowest SAD value.
+	 */
 	get_sad_index(sad_min_values_block1, sad_min_indexes_block1, &sad_index_x, &sad_index_y);
 	mb1->mv_x = normalized_left + sad_index_x - m1x;
 	mb1->mv_y = top + sad_index_y - my;
