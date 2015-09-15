@@ -187,17 +187,13 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 	__m256 v_temp = _mm256_set1_ps(0.25f);
 	
 	for (zigzag = 0; zigzag < 64; zigzag += 8)
-	{
-		for(i = 0; i < 8; ++i)
-		{
-			dct_values[i] = in_data[UV_indexes[zigzag+i]];
-		}
-		
-		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
-		
-		v_dct = _mm256_load_ps((float*) &dct_values);
+	{	
+		v_dct = _mm256_set_ps(in_data[UV_indexes[zigzag+7]], in_data[UV_indexes[zigzag+6]],
+		in_data[UV_indexes[zigzag+5]], in_data[UV_indexes[zigzag+4]], in_data[UV_indexes[zigzag+3]],
+		in_data[UV_indexes[zigzag+2]], in_data[UV_indexes[zigzag+1]], in_data[UV_indexes[zigzag]]);
 		v_res = _mm256_mul_ps(v_dct, v_temp);
-		
+			
+		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
 		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		temp2 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
 		
@@ -238,8 +234,8 @@ static void dequantize_block(float *in_data, float *out_data,
 	for (zigzag = 0; zigzag < 64; zigzag += 8)
 	{		
 		v_dct = _mm256_load_ps((float*) &in_data[zigzag]);
-		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
 		
+		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
 		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		temp2 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
 		
