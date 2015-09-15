@@ -68,7 +68,7 @@ static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref,
 	*result2 = _mm_add_epi16(row_sads_right1, row_sads_right2);
 }
 
-static void set_motion_vectors(const __m128i min_values, const __m128i min_indexes, struct macroblock* const mb, int left, int top, int mx, int my)
+static void get_sad_index(const __m128i min_values, const __m128i min_indexes, int* sad_index_x, int* sad_index_y)
 {
 	uint16_t values[8] __attribute__((aligned(16)));
 	uint16_t indexes[8] __attribute__((aligned(16)));
@@ -96,50 +96,49 @@ static void set_motion_vectors(const __m128i min_values, const __m128i min_index
 		}
 	}
 
-	int six = sad_index % 5;
-	int siy = sad_index / 5;
-
-	mb->mv_x = left + six*8 + vector_index - mx;
-	mb->mv_y = top + siy - my;
+	*sad_index_x = (sad_index % 5)*8 + vector_index;
+	*sad_index_y = sad_index / 5;
 }
 
-/* Motion estimation for 8x8 block */
-static void me_block_2x8x8(struct c63_common *cm, int mb_x, int mb_y,
+/* Motion estimation for two horizontally sequential 8x8 blocks */
+static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y,
     uint8_t *orig, uint8_t *ref, int color_component)
 {
-  int mb_index = mb_y*cm->padw[color_component]/8 + mb_x;
-  struct macroblock *left_mb = &cm->curframe->mbs[color_component][mb_index];
-  struct macroblock *right_mb = &cm->curframe->mbs[color_component][mb_index + 1];
+  int mb_index = mb_y*cm->padw[color_component]/8 + mb1_x;
+
+  // Macroblock 1
+  struct macroblock *mb1 = &cm->curframe->mbs[color_component][mb_index];
+  // Macroblock 2
+  struct macroblock *mb2 = &cm->curframe->mbs[color_component][mb_index + 1];
 
   int range = cm->me_search_range;
 
   /* Quarter resolution for chroma channels. */
   if (color_component > 0) { range /= 2; }
 
-  int left = mb_x * 8 - range;
-  int top = mb_y * 8 - range;
-  int right = mb_x * 8 + range;
-  int bottom = mb_y * 8 + range;
+  int m1x = mb1_x * 8;
+  int m2x = m1x + 8;
+  int my = mb_y * 8;
+
+  int mb1_left = m1x - range;
+  int mb2_left = m2x - range;
+  int top = my - range;
+  int mb1_right = m1x + range;
+  int mb2_right = m2x + range;
+  int bottom = my + range;
 
   int w = cm->padw[color_component];
   int h = cm->padh[color_component];
 
   /* Make sure we are within bounds of reference frame. TODO: Support partial
      frame bounds. */
-  if (left < 0) { left = 0; }
+  if (mb1_left < 0) { mb1_left = mb2_left = 0; }
   if (top < 0) { top = 0; }
-  if (right > (w - 8)) { right = w - 8; }
+  if (mb1_right > (w - 8)) { mb1_right = w - 8; }
+  if (mb2_right > (w - 8)) { mb2_right = w - 8; }
   if (bottom > (h - 8)) { bottom = h - 8; }
 
-  int y;
-
-  int mx = mb_x * 8;
-  int my = mb_y * 8;
-
-  int doleft = (mx - left) == range;
-  int doright = w > (right + 8); // 8 because 8x8 block
-
-  const uint8_t* const orig_pointer = orig + mx + w*my;
+  const uint8_t* const orig_pointer = orig + m1x + w*my;
 
   const __m128i m128i_epi16_max = _mm_set1_epi16(0x7FFF);
   const __m128i all_zeros = _mm_setzero_si128();
@@ -147,74 +146,81 @@ static void me_block_2x8x8(struct c63_common *cm, int mb_x, int mb_y,
   const __m128i row_incrementor = _mm_set1_epi16(5);
 
   __m128i counter = all_zeros;
-  __m128i sad_min_values_left = m128i_epi16_max;
-  __m128i sad_min_indexes_left = all_zeros;
-  __m128i sad_min_values_right = m128i_epi16_max;
-  __m128i sad_min_indexes_right = all_zeros;
+  __m128i sad_min_values_block1 = m128i_epi16_max;
+  __m128i sad_min_indexes_block1 = all_zeros;
+  __m128i sad_min_values_block2 = m128i_epi16_max;
+  __m128i sad_min_indexes_block2 = all_zeros;
+
+  int y;
 
   for (y = top; y < bottom; ++y)
   {
 	  __m128i start_counter = counter;
 
-	int x = left;
-
-	if (doleft)
+	if (mb1_left < mb2_left)
 	{
-		uint8_t* ref_pointer = ref + x + w*y;
+		uint8_t* ref_pointer = ref + mb1_left + w*y;
 
-		__m128i next_min_left;
-		sad_block_8x8(orig_pointer, ref_pointer, w, &next_min_left);
+		__m128i next_min_block1;
+		sad_block_8x8(orig_pointer, ref_pointer, w, &next_min_block1);
 
-		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
-		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
-		sad_min_indexes_left = _mm_blendv_epi8(sad_min_indexes_left, counter, cmpgt);
-
-		x += 8;
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_block1, next_min_block1);
+		sad_min_values_block1 = _mm_min_epi16(sad_min_values_block1, next_min_block1);
+		sad_min_indexes_block1 = _mm_blendv_epi8(sad_min_indexes_block1, counter, cmpgt);
 	}
 
 	counter = _mm_add_epi16(counter, incrementor);
 
-    for (; x < right; x+=8)
+	int x;
+
+    for (x = mb2_left; x < mb1_right; x += 8)
     {
     	uint8_t* ref_pointer = ref + x + w*y;
 
-    	__m128i next_min_left, next_min_right;
-    	sad_block_2x8x8(orig_pointer, ref_pointer, w, &next_min_left, &next_min_right);
+    	__m128i next_min_block1, next_min_block2;
+    	sad_block_2x8x8(orig_pointer, ref_pointer, w, &next_min_block1, &next_min_block2);
 
-		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_left, next_min_left);
-		sad_min_values_left = _mm_min_epi16(sad_min_values_left, next_min_left);
-		sad_min_indexes_left = _mm_blendv_epi8(sad_min_indexes_left, counter, cmpgt);
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_block1, next_min_block1);
+		sad_min_values_block1 = _mm_min_epi16(sad_min_values_block1, next_min_block1);
+		sad_min_indexes_block1 = _mm_blendv_epi8(sad_min_indexes_block1, counter, cmpgt);
 
-		cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
-		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
-		sad_min_indexes_right = _mm_blendv_epi8(sad_min_indexes_right, counter, cmpgt);
+		cmpgt = _mm_cmpgt_epi16(sad_min_values_block2, next_min_block2);
+		sad_min_values_block2 = _mm_min_epi16(sad_min_values_block2, next_min_block2);
+		sad_min_indexes_block2 = _mm_blendv_epi8(sad_min_indexes_block2, counter, cmpgt);
 
 		counter = _mm_add_epi16(counter, incrementor);
     }
 
-    if (doright)
+    if (mb2_right > mb1_right)
     {
-    	uint8_t* ref_pointer = ref + x + w*y;
+    	uint8_t* ref_pointer = ref + mb1_right + w*y;
 
-    	__m128i next_min_right;
-    	sad_block_8x8(orig_pointer + 8, ref_pointer, w, &next_min_right);
+    	__m128i next_min_block2;
+    	sad_block_8x8(orig_pointer + 8, ref_pointer, w, &next_min_block2);
 
-		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_right, next_min_right);
-		sad_min_values_right = _mm_min_epi16(sad_min_values_right, next_min_right);
-		sad_min_indexes_right = _mm_blendv_epi8(sad_min_indexes_right, counter, cmpgt);
+		__m128i cmpgt = _mm_cmpgt_epi16(sad_min_values_block2, next_min_block2);
+		sad_min_values_block2 = _mm_min_epi16(sad_min_values_block2, next_min_block2);
+		sad_min_indexes_block2 = _mm_blendv_epi8(sad_min_indexes_block2, counter, cmpgt);
     }
 
     counter = _mm_add_epi16(start_counter, row_incrementor);
   }
 
-  set_motion_vectors(sad_min_values_left, sad_min_indexes_left, left_mb, doleft ? left : left-8, top, mx, my);
-  set_motion_vectors(sad_min_values_right, sad_min_indexes_right, right_mb, doleft ? left-8 : left-16, top, mx, my);
-
   /* Here, there should be a threshold on SAD that checks if the motion vector
        is cheaper than intraprediction. We always assume MV to be beneficial */
 
-  left_mb->use_mv = 1;
-  right_mb->use_mv = 1;
+  int normalized_left = mb2_left - 8;
+  int sad_index_x, sad_index_y;
+
+  get_sad_index(sad_min_values_block1, sad_min_indexes_block1, &sad_index_x, &sad_index_y);
+  mb1->mv_x = normalized_left + sad_index_x - m1x;
+  mb1->mv_y = top + sad_index_y - my;
+  mb1->use_mv = 1;
+
+  get_sad_index(sad_min_values_block2, sad_min_indexes_block2, &sad_index_x, &sad_index_y);
+  mb2->mv_x = normalized_left + sad_index_x - m2x;
+  mb2->mv_y = top + sad_index_y - my;
+  mb2->use_mv = 1;
 }
 
 void c63_motion_estimate(struct c63_common *cm)
