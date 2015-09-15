@@ -2,12 +2,12 @@ CC = gcc
 CFLAGS = -march=native -O3 -Wall -DSHOW_CYCLES -g -pg
 LDFLAGS = -lm
 
-all: c63enc #c63dec c63pred
+all: c63enc c63pred #c63dec
 
 %.o: %.c
 	$(CC) $< $(CFLAGS) -c -o $@
 
-c63enc: c63enc.o dsp.o tables.o io.o c63_write.o c63.h common.o me.o printer.o
+c63enc: c63enc.o dsp.o tables.o io.o c63_write.o c63.h common.o me.o
 	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
 c63dec: c63dec.c dsp.o tables.o io.o c63.h common.o me.o
 	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
