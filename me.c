@@ -205,7 +205,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   }
 
   set_motion_vectors(sad_min_values_left, sad_min_indexes_left, left_mb, doleft ? left : left-8, top, mx, my);
-  set_motion_vectors(sad_min_values_right, sad_min_indexes_right, right_mb, left-8, top, mx, my);
+  set_motion_vectors(sad_min_values_right, sad_min_indexes_right, right_mb, doleft ? left-8 : left-16, top, mx, my);
 
   /* Here, there should be a threshold on SAD that checks if the motion vector
        is cheaper than intraprediction. We always assume MV to be beneficial */
@@ -229,16 +229,14 @@ void c63_motion_estimate(struct c63_common *cm)
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
 	me_block_8x8(cm, 0, mb_y, orig_Y, recons_Y, Y_COMPONENT, false, true);
-	me_block_8x8(cm, 1, mb_y, orig_Y, recons_Y, Y_COMPONENT, false, true);
 
-	unsigned int end = cm->mb_cols - 2;
+	int end = cm->mb_cols - 2;
     for (mb_x = 2; mb_x < end; mb_x+=2)
     {
       me_block_8x8(cm, mb_x, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, true);
     }
 
     me_block_8x8(cm, end, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, false);
-    me_block_8x8(cm, end + 1, mb_y, orig_Y, recons_Y, Y_COMPONENT, true, false);
   }
 
   /* Chroma */
@@ -247,7 +245,7 @@ void c63_motion_estimate(struct c63_common *cm)
 	me_block_8x8(cm, 0, mb_y, orig_U, recons_U, U_COMPONENT, false, true);
 	me_block_8x8(cm, 0, mb_y, orig_V, recons_V, V_COMPONENT, false, true);
 
-	unsigned int end = (cm->mb_cols / 2) - 1;
+	int end = (cm->mb_cols / 2) - 1;
     for (mb_x = 1; mb_x < end; mb_x+=2)
     {
       me_block_8x8(cm, mb_x, mb_y, orig_U, recons_U, U_COMPONENT, true, true);
