@@ -190,7 +190,7 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 	{
 		for(i = 0; i < 8; ++i)
 		{
-			dct_values[i] = in_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]];
+			dct_values[i] = in_data[UV_indexes[zigzag+i]];
 		}
 		
 		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
@@ -216,7 +216,7 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 		float dct = in_data[v*8+u];
 
 		// Zig-zag and quantize //
-		out_data[zigzag] = (float) round((dct / 4.0) / quant_tbl[zigzag]); //_mm_cvtepi8_epi16/32
+		out_data[zigzag] = (float) round((dct / 4.0) / quant_tbl[zigzag]);
 	}
 	*/
 }
@@ -252,7 +252,7 @@ static void dequantize_block(float *in_data, float *out_data,
 
 		for(i = 0; i < 8; ++i)
 		{
-			out_data[(zigzag_V[zigzag+i]*8) + zigzag_U[zigzag+i]] = temp[i];
+			out_data[UV_indexes[zigzag+i]] = temp[i];
 		}
 	}
 	/*
