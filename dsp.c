@@ -10,44 +10,43 @@
 
 static void transpose_block(float *in_data, float *out_data)
 {
-    int i, j;
-
-    __m128 row1[2], row2[2], row3[2], row4[2];
+    int i;
     
-    int k;
+    __m128 row1, row2, row3, row4;
+    
     for(i = 0; i < 8; i +=4 )
-    {
-		j = k = 0;
-		 
-		 
+    {		 
 		/* Transpose one 4x8 matrix at a time by using _MM_TRANSPOSE4_PS
 		 * on two 4x4 matrixes
-		 * First iteration: upper left and upper right
-		 * Second iteration: lower left and lower right
+		 * First iteration: upper left and lower left
+		 * Second iteration: upper right and lower right
 		 */
 		 
-		// Transpose the left 4x4 matrix
-		row1[k] = _mm_load_ps(in_data+j*8+i);
-		row2[k] = _mm_load_ps(in_data+(j+1)*8+i);
-		row3[k] = _mm_load_ps(in_data+(j+2)*8+i);
-		row4[k] = _mm_load_ps(in_data+(j+3)*8+i);
-		_MM_TRANSPOSE4_PS(row1[k], row2[k], row3[k], row4[k]);
-
-		j += 4;
-		++k;
-					
-		// Transpose the right 4x4 matrix
-		row1[k] = _mm_load_ps(in_data+j*8+i);
-		row2[k] = _mm_load_ps(in_data+(j+1)*8+i);
-		row3[k] = _mm_load_ps(in_data+(j+2)*8+i);
-		row4[k] = _mm_load_ps(in_data+(j+3)*8+i);
-		_MM_TRANSPOSE4_PS(row1[k], row2[k], row3[k], row4[k]);
+		// Transpose the upper 4x4 matrix
+		row1 = _mm_load_ps(in_data+i);
+		row2 = _mm_load_ps(in_data+8+i);
+		row3 = _mm_load_ps(in_data+16+i);
+		row4 = _mm_load_ps(in_data+24+i);
+		_MM_TRANSPOSE4_PS(row1, row2, row3, row4);
 		
-		// Combine each of the two 128-bit rows into a 256-bit row and store rows at the correct place in out_data buffer
-		_mm256_store_ps(out_data+i*8, _mm256_insertf128_ps(_mm256_castps128_ps256(row1[0]), row1[1], 0b00000001));
-		_mm256_store_ps(out_data+(i+1)*8, _mm256_insertf128_ps(_mm256_castps128_ps256(row2[0]), row2[1], 0b00000001));
-		_mm256_store_ps(out_data+(i+2)*8, _mm256_insertf128_ps(_mm256_castps128_ps256(row3[0]), row3[1], 0b00000001));
-		_mm256_store_ps(out_data+(i+3)*8, _mm256_insertf128_ps(_mm256_castps128_ps256(row4[0]), row4[1], 0b00000001));
+		// Store the first four elements of each row of the transposed 8x8 matrix
+		_mm_store_ps(out_data+i*8, row1);
+		_mm_store_ps(out_data+(i+1)*8, row2);
+		_mm_store_ps(out_data+(i+2)*8, row3);
+		_mm_store_ps(out_data+(i+3)*8, row4);
+					
+		// Transpose the lower 4x4 matrix
+		row1 = _mm_load_ps(in_data+32+i);
+		row2 = _mm_load_ps(in_data+40+i);
+		row3 = _mm_load_ps(in_data+48+i);
+		row4 = _mm_load_ps(in_data+56+i);
+		_MM_TRANSPOSE4_PS(row1, row2, row3, row4);
+		
+		// Store the last four elements of each row of the transposed 8x8 matrix
+		_mm_store_ps(out_data+i*8+4, row1);
+		_mm_store_ps(out_data+(i+1)*8+4, row2);
+		_mm_store_ps(out_data+(i+2)*8+4, row3);
+		_mm_store_ps(out_data+(i+3)*8+4, row4);
 	}
 }
 
