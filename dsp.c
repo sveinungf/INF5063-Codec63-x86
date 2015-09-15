@@ -104,39 +104,50 @@ static void scale_block(float *in_data, float *out_data)
 	
 	__m256 in_vector, result;
 	
-	// Load the a1 values into a regiser
+	// Load the a1 values into a register
 	static float a1_values[8] __attribute__((aligned(32))) = {ISQRT2, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
 	__m256 a1 = _mm256_load_ps(a1_values);
 	
 	// Load the a2 values into a register for the exception case
 	__m256 a2 = _mm256_set1_ps(ISQRT2);
 	
-	// First case is an exception (v = 0, u = 0)
+	/* First case is an exception (v = 0, u = 0)
+	 * Requires two _mm256_mul_ps operations */
 	in_vector = _mm256_load_ps(in_data);
 	result = _mm256_mul_ps(in_vector, a1);
 	result = _mm256_mul_ps(result, a2);
 	_mm256_store_ps(out_data, result);
 	
-	// Remaining calculations can be done with one _mm256_mul_ps operation
-	for (v = 1; v < 7; v += 3)
-	{
-		in_vector = _mm256_load_ps(in_data+v*8);
-		result = _mm256_mul_ps(in_vector, a1);
-		_mm256_store_ps(out_data+v*8, result);
-		
-		in_vector = _mm256_load_ps(in_data+(v+1)*8);
-		result = _mm256_mul_ps(in_vector, a1);
-		_mm256_store_ps(out_data+(v+1)*8, result);
-		
-		
-		in_vector = _mm256_load_ps(in_data+(v+2)*8);
-		result = _mm256_mul_ps(in_vector, a1);
-		_mm256_store_ps(out_data+(v+2)*8, result);
-	}
 	
-	in_vector = _mm256_load_ps(&in_data[56]);
+	// Remaining calculations can be done with one _mm256_mul_ps operation
+	in_vector = _mm256_load_ps(in_data+8);
 	result = _mm256_mul_ps(in_vector, a1);
-	_mm256_store_ps(&out_data[56], result);
+	_mm256_store_ps(out_data+8, result);
+		
+	in_vector = _mm256_load_ps(in_data+16);
+	result = _mm256_mul_ps(in_vector, a1);
+	_mm256_store_ps(out_data+16, result);
+		
+		
+	in_vector = _mm256_load_ps(in_data+24);
+	result = _mm256_mul_ps(in_vector, a1);
+	_mm256_store_ps(out_data+24, result);
+	
+	in_vector = _mm256_load_ps(in_data+32);
+	result = _mm256_mul_ps(in_vector, a1);
+	_mm256_store_ps(out_data+32, result);
+	
+	in_vector = _mm256_load_ps(in_data+40);
+	result = _mm256_mul_ps(in_vector, a1);
+	_mm256_store_ps(out_data+40, result);
+	
+	in_vector = _mm256_load_ps(in_data+48);
+	result = _mm256_mul_ps(in_vector, a1);
+	_mm256_store_ps(out_data+48, result);
+	
+	in_vector = _mm256_load_ps(in_data+56);
+	result = _mm256_mul_ps(in_vector, a1);
+	_mm256_store_ps(out_data+56, result);
 }
 
 // Rounding half away from zero (equivalent to round() from math.h)
@@ -223,7 +234,7 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 static void dequantize_block(float *in_data, float *out_data,
     uint8_t *quant_tbl)
 {
-	int zigzag, i;
+	int zigzag;
 	
 	// Temporary buffer
 	float temp_buf[8] __attribute__((aligned(32)));
@@ -258,10 +269,14 @@ static void dequantize_block(float *in_data, float *out_data,
 		_mm256_store_ps(temp_buf, result);
 
 		// Store the results at the correct places in the out_data buffer
-		for(i = 0; i < 8; ++i)
-		{
-			out_data[UV_indexes[zigzag+i]] = temp_buf[i];
-		}
+		out_data[UV_indexes[zigzag]] = temp_buf[0];
+		out_data[UV_indexes[zigzag+1]] = temp_buf[1];
+		out_data[UV_indexes[zigzag+2]] = temp_buf[2];
+		out_data[UV_indexes[zigzag+3]] = temp_buf[3];
+		out_data[UV_indexes[zigzag+4]] = temp_buf[4];
+		out_data[UV_indexes[zigzag+5]] = temp_buf[5];
+		out_data[UV_indexes[zigzag+6]] = temp_buf[6];
+		out_data[UV_indexes[zigzag+7]] = temp_buf[7];
 	}
 }
 
