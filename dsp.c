@@ -27,27 +27,27 @@ static void transpose_block(float *in_data, float *out_data)
 		 */
 		 
 		// Transpose the left 4x4 matrix
-		row1[k] = _mm_load_ps(&in_data[(j*8)+i]);
-		row2[k] = _mm_load_ps(&in_data[((j+1)*8)+i]);
-		row3[k] = _mm_load_ps(&in_data[((j+2)*8)+i]);
-		row4[k] = _mm_load_ps(&in_data[((j+3)*8)+i]);
+		row1[k] = _mm_load_ps(in_data+j*8+i);
+		row2[k] = _mm_load_ps(in_data+(j+1)*8+i);
+		row3[k] = _mm_load_ps(in_data+(j+2)*8+i);
+		row4[k] = _mm_load_ps(in_data+(j+3)*8+i);
 		_MM_TRANSPOSE4_PS(row1[k], row2[k], row3[k], row4[k]);
 
 		j += 4;
 		++k;
 					
 		// Transpose the right 4x4 matrix
-		row1[k] = _mm_load_ps(&in_data[(j*8)+i]);
-		row2[k] = _mm_load_ps(&in_data[((j+1)*8)+i]);
-		row3[k] = _mm_load_ps(&in_data[((j+2)*8)+i]);
-		row4[k] = _mm_load_ps(&in_data[((j+3)*8)+i]);
+		row1[k] = _mm_load_ps(in_data+j*8+i);
+		row2[k] = _mm_load_ps(in_data+(j+1)*8+i);
+		row3[k] = _mm_load_ps(in_data+(j+2)*8+i);
+		row4[k] = _mm_load_ps(in_data+(j+3)*8+i);
 		_MM_TRANSPOSE4_PS(row1[k], row2[k], row3[k], row4[k]);
 		
 		// Combine each of the two 128-bit rows into a 256-bit row and store rows at the correct place in out_data buffer
-		_mm256_store_ps(&out_data[(i*8)], _mm256_insertf128_ps(_mm256_castps128_ps256(row1[0]), row1[1], 0b00000001));
-		_mm256_store_ps(&out_data[((i+1)*8)], _mm256_insertf128_ps(_mm256_castps128_ps256(row2[0]), row2[1], 0b00000001));
-		_mm256_store_ps(&out_data[((i+2)*8)], _mm256_insertf128_ps(_mm256_castps128_ps256(row3[0]), row3[1], 0b00000001));
-		_mm256_store_ps(&out_data[((i+3)*8)], _mm256_insertf128_ps(_mm256_castps128_ps256(row4[0]), row4[1], 0b00000001));
+		_mm256_store_ps(out_data+i*8, _mm256_insertf128_ps(_mm256_castps128_ps256(row1[0]), row1[1], 0b00000001));
+		_mm256_store_ps(out_data+(i+1)*8, _mm256_insertf128_ps(_mm256_castps128_ps256(row2[0]), row2[1], 0b00000001));
+		_mm256_store_ps(out_data+(i+2)*8, _mm256_insertf128_ps(_mm256_castps128_ps256(row3[0]), row3[1], 0b00000001));
+		_mm256_store_ps(out_data+(i+3)*8, _mm256_insertf128_ps(_mm256_castps128_ps256(row4[0]), row4[1], 0b00000001));
 	}
 }
 
@@ -106,32 +106,32 @@ static void scale_block(float *in_data, float *out_data)
 	
 	// Load the a1 values into a regiser
 	static float a1_values[8] __attribute__((aligned(32))) = {ISQRT2, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
-	__m256 a1 = _mm256_load_ps((float*) a1_values);
+	__m256 a1 = _mm256_load_ps(a1_values);
 	
 	// Load the a2 values into a register for the exception case
 	__m256 a2 = _mm256_set1_ps(ISQRT2);
 	
 	// First case is an exception (v = 0, u = 0)
-	in_vector = _mm256_load_ps(&in_data[0]);
+	in_vector = _mm256_load_ps(in_data);
 	result = _mm256_mul_ps(in_vector, a1);
 	result = _mm256_mul_ps(result, a2);
-	_mm256_store_ps(&out_data[0], result);
+	_mm256_store_ps(out_data, result);
 	
 	// Remaining calculations can be done with one _mm256_mul_ps operation
 	for (v = 1; v < 7; v += 3)
 	{
-		in_vector = _mm256_load_ps(&in_data[v*8]);
+		in_vector = _mm256_load_ps(in_data+v*8);
 		result = _mm256_mul_ps(in_vector, a1);
-		_mm256_store_ps(&out_data[v*8], result);
+		_mm256_store_ps(out_data+v*8, result);
 		
-		in_vector = _mm256_load_ps(&in_data[(v+1)*8]);
+		in_vector = _mm256_load_ps(in_data+(v+1)*8);
 		result = _mm256_mul_ps(in_vector, a1);
-		_mm256_store_ps(&out_data[(v+1)*8], result);
+		_mm256_store_ps(out_data+(v+1)*8, result);
 		
 		
-		in_vector = _mm256_load_ps(&in_data[(v+2)*8]);
+		in_vector = _mm256_load_ps(in_data+(v+2)*8);
 		result = _mm256_mul_ps(in_vector, a1);
-		_mm256_store_ps(&out_data[(v+2)*8], result);
+		_mm256_store_ps(out_data+(v+2)*8, result);
 	}
 	
 	in_vector = _mm256_load_ps(&in_data[56]);
@@ -237,7 +237,7 @@ static void dequantize_block(float *in_data, float *out_data,
 	for (zigzag = 0; zigzag < 64; zigzag += 8)
 	{		
 		// Load dct-values
-		dct_values = _mm256_load_ps((float*) &in_data[zigzag]);
+		dct_values = _mm256_load_ps(in_data+zigzag);
 		
 		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
 		 * and convert them to floating-point values */
