@@ -20,7 +20,15 @@ static void transpose_block(float *in_data, float *out_data)
     for(i = 0; i < 8; i +=4 )
     {
 		j = k = 0;
-		
+		 
+		 
+		/* Transpose one 4x8 matrix at a time by using _MM_TRANSPOSE4_PS
+		 * on two 4x4 matrixes
+		 * First iteration: upper left and upper right
+		 * Second iteration: lower left and lower right
+		 */
+		 
+		// Transpose the left 4x4 matrix
 		row1[k] = _mm_load_ps(&in_data[(j*8)+i]);
 		row2[k] = _mm_load_ps(&in_data[((j+1)*8)+i]);
 		row3[k] = _mm_load_ps(&in_data[((j+2)*8)+i]);
@@ -30,17 +38,18 @@ static void transpose_block(float *in_data, float *out_data)
 		j += 4;
 		++k;
 					
+		// Transpose the right 4x4 matrix
 		row1[k] = _mm_load_ps(&in_data[(j*8)+i]);
 		row2[k] = _mm_load_ps(&in_data[((j+1)*8)+i]);
 		row3[k] = _mm_load_ps(&in_data[((j+2)*8)+i]);
 		row4[k] = _mm_load_ps(&in_data[((j+3)*8)+i]);
 		_MM_TRANSPOSE4_PS(row1[k], row2[k], row3[k], row4[k]);
 		
+		// Combine each of the two 128-bit rows into a 256-bit row and store rows at the correct place in out_data buffer
 		_mm256_store_ps(&out_data[(i*8)], _mm256_insertf128_ps(_mm256_castps128_ps256(row1[0]), row1[1], 0b00000001));
 		_mm256_store_ps(&out_data[((i+1)*8)], _mm256_insertf128_ps(_mm256_castps128_ps256(row2[0]), row2[1], 0b00000001));
 		_mm256_store_ps(&out_data[((i+2)*8)], _mm256_insertf128_ps(_mm256_castps128_ps256(row3[0]), row3[1], 0b00000001));
 		_mm256_store_ps(&out_data[((i+3)*8)], _mm256_insertf128_ps(_mm256_castps128_ps256(row4[0]), row4[1], 0b00000001));
-		// Better to just store 128 bit at a time?	
 	}
 }
 
@@ -97,17 +106,20 @@ static void scale_block(float *in_data, float *out_data)
 	
 	__m256 v_in, v_res;
 	
+	// Load the a1 values into a regiser
 	static float v_au[8] __attribute__((aligned(32))) = {ISQRT2, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
 	__m256 au = _mm256_load_ps((float*) &v_au);
 	
+	// Load the a2 values into a register for the exception case
 	__m256 av = _mm256_set1_ps(ISQRT2);
 	
-	
+	// First case is an exception (v = 0, u = 0)
 	v_in = _mm256_load_ps(&in_data[0]);
 	v_res = _mm256_mul_ps(v_in, au);
 	v_res = _mm256_mul_ps(v_res, av);
 	_mm256_store_ps(&out_data[0], v_res);
 	
+	// Remaining calculations can be done with one _mm256_mul_ps operation
 	for (v = 1; v < 7; v += 3)
 	{
 		v_in = _mm256_load_ps(&in_data[v*8]);
@@ -186,18 +198,24 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 	
 	for (zigzag = 0; zigzag < 64; zigzag += 8)
 	{	
+		// Set the dct_values for the current interation
 		v_dct = _mm256_set_ps(in_data[UV_indexes[zigzag+7]], in_data[UV_indexes[zigzag+6]],
 		in_data[UV_indexes[zigzag+5]], in_data[UV_indexes[zigzag+4]], in_data[UV_indexes[zigzag+3]],
 		in_data[UV_indexes[zigzag+2]], in_data[UV_indexes[zigzag+1]], in_data[UV_indexes[zigzag]]);
+		// Divide by 4.0 by multiplying with 0.25
 		v_res = _mm256_mul_ps(v_dct, v_temp);
-			
+		
+		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
+		 * and convert them to floating-point values */
 		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
 		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		temp2 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
 		
+		// Combine the two 128-bit registers containing quant-values and multiply with previous product
 		q_tbl = _mm256_insertf128_ps(_mm256_castps128_ps256(temp1), temp2, 0b00000001);
 		v_res = _mm256_div_ps(v_res, q_tbl);
 
+		// Round off values and store in out_data buffer
 		v_res = c63_mm256_roundhalfawayfromzero_ps(v_res);
 		_mm256_store_ps(out_data + zigzag, v_res);
 	}
@@ -231,19 +249,28 @@ static void dequantize_block(float *in_data, float *out_data,
 	
 	for (zigzag = 0; zigzag < 64; zigzag += 8)
 	{		
+		// Load dct-values
 		v_dct = _mm256_load_ps((float*) &in_data[zigzag]);
 		
+		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
+		 * and convert them to floating-point values */
 		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
 		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		temp2 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
 		
+		/* Combine the two 128-bit registers containing quant-values 
+		 * and multiply with the register containing dct-values */
 		q_tbl = _mm256_insertf128_ps(_mm256_castps128_ps256(temp1), temp2, 0b00000001);
 		v_res = _mm256_mul_ps(v_dct, q_tbl);
+		
+		// Divide by 4.0 by multiplying with 0.25
 		v_res = _mm256_mul_ps(v_res, v_temp);
-
+	
+		// Round off product and store them temporarily
 		v_res = c63_mm256_roundhalfawayfromzero_ps(v_res);
 		_mm256_store_ps(temp, v_res);
 
+		// Store the results at the correct places in the out_data buffer
 		for(i = 0; i < 8; ++i)
 		{
 			out_data[UV_indexes[zigzag+i]] = temp[i];

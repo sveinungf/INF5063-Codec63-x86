@@ -232,6 +232,9 @@ uint8_t zigzag_V[64] =
   7,
 };
 
+/* Array containing the indexes resulting from calculating
+ * (zigzag_V[zigzag]*8) + zigzag_U[zigzag] for zigzag = 0, 1, ..., 63
+ */
 uint8_t UV_indexes[64] =
 {
 	 0,  1,  8, 16,  9,  2,  3, 10,
@@ -256,6 +259,7 @@ float dctlookup[64] __attribute__((aligned(32))) =
   1.0f, -0.980785f,  0.923880f, -0.831470f,  0.707107f, -0.555570f,  0.382683f, -0.195090f
 };
 
+// Transposed version of dctlookup used in dct_1d_general for performing the idct_1d calculations
 float dctlookup_trans[64] __attribute__((aligned(32))) =
 {
   1.000000f,  1.000000f,  1.000000f,  1.000000f,  1.000000f,  1.000000f,  1.000000f,  1.000000f,  
