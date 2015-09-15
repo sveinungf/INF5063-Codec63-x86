@@ -219,18 +219,6 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 		v_res = c63_mm256_roundhalfawayfromzero_ps(v_res);
 		_mm256_store_ps(out_data + zigzag, v_res);
 	}
-	/*
-	for (zigzag = 0; zigzag < 64; ++zigzag)
-	{
-		uint8_t u = zigzag_U[zigzag];
-		uint8_t v = zigzag_V[zigzag];
-
-		float dct = in_data[v*8+u];
-
-		// Zig-zag and quantize //
-		out_data[zigzag] = (float) round((dct / 4.0) / quant_tbl[zigzag]);
-	}
-	*/
 }
 			
 static void dequantize_block(float *in_data, float *out_data,
@@ -276,18 +264,6 @@ static void dequantize_block(float *in_data, float *out_data,
 			out_data[UV_indexes[zigzag+i]] = temp[i];
 		}
 	}
-	/*
-	for (zigzag = 0; zigzag < 64; ++zigzag)
-	{
-		uint8_t u = zigzag_U[zigzag];
-		uint8_t v = zigzag_V[zigzag];
-
-		float dct = in_data[zigzag];
-
-		// Zig-zag and de-quantize //
-		out_data[v*8+u] = (float) round((dct * quant_tbl[zigzag]) / 4.0);
-	}
-	*/
 }
 
 
