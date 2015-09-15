@@ -202,12 +202,12 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 		v_dct = _mm256_set_ps(in_data[UV_indexes[zigzag+7]], in_data[UV_indexes[zigzag+6]],
 		in_data[UV_indexes[zigzag+5]], in_data[UV_indexes[zigzag+4]], in_data[UV_indexes[zigzag+3]],
 		in_data[UV_indexes[zigzag+2]], in_data[UV_indexes[zigzag+1]], in_data[UV_indexes[zigzag]]);
-		// Divide by 4.0 by multiplying with 0.25
+		// Multiply with 0.25 to divide by 4.0
 		v_res = _mm256_mul_ps(v_dct, v_temp);
 		
 		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
 		 * and convert them to floating-point values */
-		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
+		quants = _mm_loadl_epi64((__m128i*) &quant_tbl[zigzag]);
 		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		temp2 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
 		
@@ -226,10 +226,10 @@ static void dequantize_block(float *in_data, float *out_data,
 {
 	int zigzag, i;
 	
+	// Temporary buffer
 	float temp[8] __attribute__((aligned(32)));
 	
 	__m128i quants;	
-	
 	__m128 temp1, temp2;
 	
 	__m256 v_res, v_dct, q_tbl;
@@ -242,7 +242,7 @@ static void dequantize_block(float *in_data, float *out_data,
 		
 		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
 		 * and convert them to floating-point values */
-		quants = _mm_loadu_si128((__m128i*) &quant_tbl[zigzag]);
+		quants = _mm_loadl_epi64((__m128i*) &quant_tbl[zigzag]);
 		temp1 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		temp2 = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
 		
@@ -251,10 +251,10 @@ static void dequantize_block(float *in_data, float *out_data,
 		q_tbl = _mm256_insertf128_ps(_mm256_castps128_ps256(temp1), temp2, 0b00000001);
 		v_res = _mm256_mul_ps(v_dct, q_tbl);
 		
-		// Divide by 4.0 by multiplying with 0.25
+		// Multiply with 0.25 to divide by 4.0
 		v_res = _mm256_mul_ps(v_res, v_temp);
 	
-		// Round off product and store them temporarily
+		// Round off products and store them temporarily
 		v_res = c63_mm256_roundhalfawayfromzero_ps(v_res);
 		_mm256_store_ps(temp, v_res);
 
