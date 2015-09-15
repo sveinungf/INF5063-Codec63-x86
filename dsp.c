@@ -59,9 +59,13 @@ static void dct_1d_general(float* in_data, float* out_data, float lookup[64])
 	multiplied = _mm256_mul_ps(dct_values, current);
 	sum = multiplied;
 
+	// Broadcasts a single float (scalar) to every element in 'current'.
 	current = _mm256_broadcast_ss(in_data + 1);
+	// Loads DCT values from the lookup table. iDCT uses a transposed lookup table here.
 	dct_values = _mm256_load_ps(lookup + 8);
+	// Vertically multiply the scalar with the DCT values.
 	multiplied = _mm256_mul_ps(dct_values, current);
+	// Vertically add to the previous sum.
 	sum = _mm256_add_ps(sum, multiplied);
 
 	current = _mm256_broadcast_ss(in_data + 2);
