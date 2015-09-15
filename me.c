@@ -68,7 +68,7 @@ static void sad_block_2x8x8(const uint8_t* const orig, const uint8_t* const ref,
 	*result2 = _mm_add_epi16(row_sads_right1, row_sads_right2);
 }
 
-static void get_sad_index(const __m128i min_values, const __m128i min_indexes, int* sad_index_x, int* sad_index_y)
+static void get_sad_index(const __m128i min_values, const __m128i min_indexes, int* sad_index_x, int* sad_index_y, int index_vector_row_length)
 {
 	uint16_t values[8] __attribute__((aligned(16)));
 	uint16_t indexes[8] __attribute__((aligned(16)));
@@ -96,8 +96,8 @@ static void get_sad_index(const __m128i min_values, const __m128i min_indexes, i
 		}
 	}
 
-	*sad_index_x = (sad_index % 5) * 8 + vector_index;
-	*sad_index_y = sad_index / 5;
+	*sad_index_x = (sad_index % index_vector_row_length) * 8 + vector_index;
+	*sad_index_y = sad_index / index_vector_row_length;
 }
 
 /* Motion estimation for two horizontally sequential 8x8 blocks */
@@ -162,8 +162,14 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 
 	// The incrementors are used to keep track of the indexes of the current minimum values
 	const __m128i incrementor = _mm_set1_epi16(1);
-	// Plus one because both macroblocks uses the same counter
-	const __m128i row_incrementor = _mm_set1_epi16(5);
+
+	/*
+	 * This indicates how many 8x8 regions fit horizontally in the search range. It is used by
+	 * the counter to be able to find the column index at the end. Plus one because both
+	 * macroblocks uses the same counter.
+	 */
+	int index_vector_row_length = range * 4 + 1;
+	const __m128i row_incrementor = _mm_set1_epi16(index_vector_row_length);
 
 	// The counter keeps track of which 8x8 region we currently have calculated a SAD value in
 	__m128i counter = all_zeros;
@@ -270,12 +276,12 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 	 * Now we have 8 SAD values and their corresponding indexes. get_sad_index() finds the
 	 * x and y values for the first macroblock with the lowest SAD value.
 	 */
-	get_sad_index(sad_min_values_block1, sad_min_indexes_block1, &sad_index_x, &sad_index_y);
+	get_sad_index(sad_min_values_block1, sad_min_indexes_block1, &sad_index_x, &sad_index_y, index_vector_row_length);
 	mb1->mv_x = normalized_left + sad_index_x - m1x;
 	mb1->mv_y = top + sad_index_y - my;
 	mb1->use_mv = 1;
 
-	get_sad_index(sad_min_values_block2, sad_min_indexes_block2, &sad_index_x, &sad_index_y);
+	get_sad_index(sad_min_values_block2, sad_min_indexes_block2, &sad_index_x, &sad_index_y, index_vector_row_length);
 	mb2->mv_x = normalized_left + sad_index_x - m2x;
 	mb2->mv_y = top + sad_index_y - my;
 	mb2->use_mv = 1;
