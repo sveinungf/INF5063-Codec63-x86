@@ -17,7 +17,7 @@ static void transpose_block(float *in_data, float *out_data)
 	{
 		for (j = 0; j < 8; ++j)
 		{
-		out_data[i*8+j] = in_data[j*8+i];
+			out_data[i*8+j] = in_data[j*8+i];
 		}
 	}
 	/*
@@ -71,7 +71,7 @@ static void dct_1d(float *in_data, float *out_data)
 
     for (j = 0; j < 8; ++j)
     {
-      dct += in_data[j] * dctlookup[j*8+i];
+		dct += in_data[j] * dctlookup[j*8+i];
     }
 
     out_data[i] = dct;
