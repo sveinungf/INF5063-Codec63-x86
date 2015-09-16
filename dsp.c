@@ -113,7 +113,7 @@ static void scale_block(float *in_data, float *out_data)
 	// Load the a2 values into a register for the exception case
 	__m256 a2 = _mm256_set1_ps(ISQRT2);
 	
-	/* First case is an exception (v = 0)
+	/* First row is an exception
 	 * Requires two _mm256_mul_ps operations */
 	in_vector = _mm256_load_ps(in_data);
 	result = _mm256_mul_ps(in_vector, a1);
