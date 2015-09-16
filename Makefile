@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -march=native -O3 -Wall -DSHOW_CYCLES -g -pg
+CFLAGS = -march=native -Wall -O3 -DSHOW_CYCLES -g -pg
 LDFLAGS = -lm
 
 all: c63enc c63pred #c63dec

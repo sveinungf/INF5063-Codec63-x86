@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "dsp.h"
 #include "tables.h"
@@ -10,17 +11,26 @@
 
 static void transpose_block(float *in_data, float *out_data)
 {
+	int i, j;
+
+	for (i = 0; i < 8; ++i)
+	{
+		for (j = 0; j < 8; ++j)
+		{
+		out_data[i*8+j] = in_data[j*8+i];
+		}
+	}
+	/*
     int i;
     
     __m128 row1, row2, row3, row4;
     
     for(i = 0; i < 8; i +=4 )
     {		 
-		/* Transpose one 4x8 matrix at a time by using _MM_TRANSPOSE4_PS
-		 * on two 4x4 matrixes
-		 * First iteration: upper left and lower left
-		 * Second iteration: upper right and lower right
-		 */
+		// Transpose one 4x8 matrix at a time by using _MM_TRANSPOSE4_PS
+		// on two 4x4 matrixes
+		// First iteration: upper left and lower left
+		// Second iteration: upper right and lower right
 		 
 		// Transpose the upper 4x4 matrix
 		row1 = _mm_load_ps(in_data+i);
@@ -48,6 +58,41 @@ static void transpose_block(float *in_data, float *out_data)
 		_mm_store_ps(out_data+(i+2)*8+4, row3);
 		_mm_store_ps(out_data+(i+3)*8+4, row4);
 	}
+	*/
+}
+
+static void dct_1d(float *in_data, float *out_data)
+{
+  int i, j;
+
+  for (i = 0; i < 8; ++i)
+  {
+    float dct = 0;
+
+    for (j = 0; j < 8; ++j)
+    {
+      dct += in_data[j] * dctlookup[j*8+i];
+    }
+
+    out_data[i] = dct;
+  }
+}
+
+static void idct_1d(float *in_data, float *out_data)
+{
+  int i, j;
+
+  for (i = 0; i < 8; ++i)
+  {
+    float idct = 0;
+
+    for (j = 0; j < 8; ++j)
+    {
+      idct += in_data[j] * dctlookup[i*8+j];
+    }
+
+    out_data[i] = idct;
+  }
 }
 
 static void dct_1d_general(float* in_data, float* out_data, float lookup[64])
@@ -99,6 +144,20 @@ static void dct_1d_general(float* in_data, float* out_data, float lookup[64])
 
 static void scale_block(float *in_data, float *out_data)
 {
+	int u, v;
+
+	for (v = 0; v < 8; ++v)
+	{
+		for (u = 0; u < 8; ++u)
+		{
+			float a1 = !u ? ISQRT2 : 1.0f;
+			float a2 = !v ? ISQRT2 : 1.0f;
+
+			/* Scale according to normalizing function */
+			out_data[v*8+u] = in_data[v*8+u] * a1 * a2;
+		}
+	}
+	/*
 	__m256 in_vector, result;
 	
 	// Load the a1 values into a register
@@ -106,10 +165,10 @@ static void scale_block(float *in_data, float *out_data)
 	__m256 a1 = _mm256_load_ps(a1_values);
 	
 	// Load the a2 values into a register for the exception case
-	__m256 a2 = _mm256_set1_ps(ISQRT2);
+	//__m256 a2 = _mm256_set1_ps(ISQRT2);
 	
-	/* First case is an exception (v = 0)
-	 * Requires two _mm256_mul_ps operations */
+	// First case is an exception (v = 0)
+	// Requires two _mm256_mul_ps operations
 	in_vector = _mm256_load_ps(in_data);
 	result = _mm256_mul_ps(in_vector, a1);
 	result = _mm256_mul_ps(result, a2);
@@ -145,6 +204,7 @@ static void scale_block(float *in_data, float *out_data)
 	in_vector = _mm256_load_ps(in_data+56);
 	result = _mm256_mul_ps(in_vector, a1);
 	_mm256_store_ps(out_data+56, result);
+	*/
 }
 
 // Rounding half away from zero (equivalent to round() from math.h)
@@ -195,6 +255,20 @@ static __m256 c63_mm256_roundhalfawayfromzero_ps(const __m256 initial)
 static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
 	int zigzag;
+
+	for (zigzag = 0; zigzag < 64; ++zigzag)
+	{
+		uint8_t u = zigzag_U[zigzag];
+		uint8_t v = zigzag_V[zigzag];
+
+		float dct = in_data[v*8+u];
+	
+		/* Zig-zag and quantize */
+		out_data[zigzag] = (float) round((dct / 4.0) / quant_tbl[zigzag]);
+	}
+	
+	/*
+	int zigzag;
 	
 	__m128i quants;	
 	__m128 quant_lo, quant_hi;
@@ -212,8 +286,8 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 		// Multiply with 0.25 to divide by 4.0
 		result = _mm256_mul_ps(dct_values, factor);
 		
-		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
-		 * and convert them to floating-point values */
+		// Load values from quant_tbl, extract the eight first values as 32-bit integers
+		// and convert them to floating-point values
 		quants = _mm_loadl_epi64((__m128i*) &quant_tbl[zigzag]);
 		quant_lo = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		quant_hi = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
@@ -226,11 +300,25 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 		result = c63_mm256_roundhalfawayfromzero_ps(result);
 		_mm256_store_ps(out_data + zigzag, result);
 	}
+	*/
 }
 			
 static void dequantize_block(float *in_data, float *out_data,
     uint8_t *quant_tbl)
 {
+	int zigzag;
+
+	for (zigzag = 0; zigzag < 64; ++zigzag)
+	{
+		uint8_t u = zigzag_U[zigzag];
+		uint8_t v = zigzag_V[zigzag];
+
+		float dct = in_data[zigzag];
+
+		/* Zig-zag and de-quantize */
+		out_data[v*8+u] = (float) round((dct * quant_tbl[zigzag]) / 4.0);
+	}
+	/*
 	int zigzag;
 	
 	// Temporary buffer
@@ -247,14 +335,14 @@ static void dequantize_block(float *in_data, float *out_data,
 		// Load dct-values
 		dct_values = _mm256_load_ps(in_data+zigzag);
 		
-		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
-		 * and convert them to floating-point values */
+		// Load values from quant_tbl, extract the eight first values as 32-bit integers
+		// and convert them to floating-point values
 		quants = _mm_loadl_epi64((__m128i*) &quant_tbl[zigzag]);
 		quant_lo = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
 		quant_hi = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
 		
-		/* Combine the two 128-bit registers containing quant-values 
-		 * and multiply with the register containing dct-values */
+		// Combine the two 128-bit registers containing quant-values 
+		// and multiply with the register containing dct-values
 		quant_values = _mm256_insertf128_ps(_mm256_castps128_ps256(quant_lo), quant_hi, 0b00000001);
 		result = _mm256_mul_ps(dct_values, quant_values);
 		
@@ -275,6 +363,7 @@ static void dequantize_block(float *in_data, float *out_data,
 		out_data[UV_indexes[zigzag+6]] = temp_buf[6];
 		out_data[UV_indexes[zigzag+7]] = temp_buf[7];
 	}
+	*/
 }
 
 
@@ -294,14 +383,16 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   /* Two 1D DCT operations with transpose */
   for (v = 0; v < 8; ++v) 
     {
-       dct_1d_general(mb2+v*8, mb+v*8, dctlookup);
+		dct_1d(mb2+v*8, mb+v*8);
+		//dct_1d_general(mb2+v*8, mb+v*8, dctlookup);
     }
     
   transpose_block(mb, mb2);
   
   for (v = 0; v < 8; ++v)
     {
-       dct_1d_general(mb2+v*8, mb+v*8, dctlookup);
+		dct_1d(mb2+v*8, mb+v*8);
+		//dct_1d_general(mb2+v*8, mb+v*8, dctlookup);
     }
   transpose_block(mb, mb2);
 
@@ -322,7 +413,8 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
 
   int i, v;
 
-  for (i = 0; i < 64; ++i) {
+  for (i = 0; i < 64; ++i)
+  {
   	mb[i] = in_data[i];
   }
 
@@ -331,13 +423,15 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
 
   /* Two 1D inverse DCT operations with transpose */
   for (v = 0; v < 8; ++v) {
-	  dct_1d_general(mb+v*8, mb2+v*8, dctlookup_trans);
+	  idct_1d(mb+v*8, mb2+v*8);
+	  //dct_1d_general(mb+v*8, mb2+v*8, dctlookup_trans);
   }
 
   transpose_block(mb2, mb);
 
   for (v = 0; v < 8; ++v) {
-	  dct_1d_general(mb+v*8, mb2+v*8, dctlookup_trans);
+	  idct_1d(mb+v*8, mb2+v*8);
+	  //dct_1d_general(mb+v*8, mb2+v*8, dctlookup_trans);
   }
 
   transpose_block(mb2, mb);
