@@ -199,7 +199,7 @@ static void me_block_2x8x8(struct c63_common *cm, int mb1_x, int mb_y, uint8_t *
 	 * the counter to be able to find the column index at the end. Plus one because both
 	 * macroblocks uses the same counter.
 	 */
-	int index_vector_row_length = range * 4 + 1;
+	int index_vector_row_length = range / 4 + 1;
 	const __m128i row_incrementor = _mm_set1_epi16(index_vector_row_length);
 
 	// The counter keeps track of which 8x8 region we currently have calculated a SAD value in
