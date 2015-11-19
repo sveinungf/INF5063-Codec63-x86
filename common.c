@@ -11,7 +11,7 @@
 #include "dsp.h"
 
 void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h,
-    int y, uint8_t *out_data, uint8_t *quantization)
+    int y, uint8_t *out_data, float *quantization)
 {
   int x;
 
@@ -42,7 +42,7 @@ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h,
 }
 
 void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
-    uint32_t height, uint8_t *out_data, uint8_t *quantization)
+    uint32_t height, uint8_t *out_data, float *quantization)
 {
   int y;
 
@@ -54,7 +54,7 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
 }
 
 void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h,
-    int16_t *out_data, uint8_t *quantization)
+    int16_t *out_data, float *quantization)
 {
   int x;
 
@@ -81,7 +81,7 @@ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h,
 }
 
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
-    uint32_t height, int16_t *out_data, uint8_t *quantization)
+    uint32_t height, int16_t *out_data, float *quantization)
 {
   int y;
 

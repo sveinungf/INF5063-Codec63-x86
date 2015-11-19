@@ -9,3 +9,4 @@ c63pred
 /gmon.out
 
 *.pyc
+/.ptp-sync/

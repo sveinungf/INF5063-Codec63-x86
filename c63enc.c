@@ -113,23 +113,23 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   /* DCT and Quantization */
   dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
       cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
-      cm->quanttbl[Y_COMPONENT]);
+      cm->quanttbl_fp[Y_COMPONENT]);
 
   dct_quantize(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
       cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
-      cm->quanttbl[U_COMPONENT]);
+      cm->quanttbl_fp[U_COMPONENT]);
 
   dct_quantize(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
       cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
-      cm->quanttbl[V_COMPONENT]);
+      cm->quanttbl_fp[V_COMPONENT]);
 
   /* Reconstruct frame for inter-prediction */
   dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
-      cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
+      cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl_fp[Y_COMPONENT]);
   dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
-      cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
+      cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl_fp[U_COMPONENT]);
   dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
-      cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
+      cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl_fp[V_COMPONENT]);
 
   /* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */
@@ -173,6 +173,9 @@ struct c63_common* init_c63_enc(int width, int height)
     cm->quanttbl[Y_COMPONENT][i] = yquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[U_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
+    cm->quanttbl_fp[Y_COMPONENT][i] = (uint8_t) (yquanttbl_def[i] / (cm->qp / 10.0));
+    cm->quanttbl_fp[U_COMPONENT][i] = (uint8_t) (uvquanttbl_def[i] / (cm->qp / 10.0));
+    cm->quanttbl_fp[V_COMPONENT][i] = (uint8_t) (uvquanttbl_def[i] / (cm->qp / 10.0));
   }
 
   return cm;

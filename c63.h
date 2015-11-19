@@ -100,6 +100,7 @@ struct c63_common
   int me_search_range;
 
   uint8_t quanttbl[COLOR_COMPONENTS][64];
+  float quanttbl_fp[COLOR_COMPONENTS][64] __attribute__ ((aligned(32)));
 
   struct frame *refframe;
   struct frame *curframe;
