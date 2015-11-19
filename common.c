@@ -10,6 +10,11 @@
 #include "common.h"
 #include "dsp.h"
 
+
+static const int Y = Y_COMPONENT;
+static const int U = U_COMPONENT;
+static const int V = V_COMPONENT;
+
 void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h,
     int y, uint8_t *out_data, uint8_t *quantization)
 {
@@ -141,11 +146,11 @@ struct frame* create_frame(struct c63_common *cm, yuv_t *image)
   f->residuals->Vdct = calloc(cm->vpw * cm->vph, sizeof(int16_t));
 
   f->mbs[Y_COMPONENT] =
-    calloc(cm->mb_rows * cm->mb_cols, sizeof(struct macroblock));
+    calloc(cm->mb_rows[Y] * cm->mb_cols[Y], sizeof(struct macroblock));
   f->mbs[U_COMPONENT] =
-    calloc(cm->mb_rows/2 * cm->mb_cols/2, sizeof(struct macroblock));
+    calloc(cm->mb_rows[U] * cm->mb_cols[U], sizeof(struct macroblock));
   f->mbs[V_COMPONENT] =
-    calloc(cm->mb_rows/2 * cm->mb_cols/2, sizeof(struct macroblock));
+    calloc(cm->mb_rows[V] * cm->mb_cols[V], sizeof(struct macroblock));
 
   return f;
 }
