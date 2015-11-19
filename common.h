@@ -9,10 +9,10 @@
 struct frame* create_frame(struct c63_common *cm, yuv_t *image);
 
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
-    uint32_t height, int16_t *out_data, uint8_t *quantization);
+    uint32_t height, int16_t *out_data, float *quantization);
 
 void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
-    uint32_t height, uint8_t *out_data, uint8_t *quantization);
+    uint32_t height, uint8_t *out_data, float *quantization);
 
 void destroy_frame(struct frame *f);
 

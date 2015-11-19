@@ -197,34 +197,25 @@ static __m256 c63_mm256_roundhalfawayfromzero_ps(const __m256 initial)
 	return _mm256_add_ps(without_fraction, to_add);
 }
 
-static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
+static void quantize_block(const float *in_data, float *out_data, float *quant_tbl)
 {
 	int zigzag;
-	
-	__m128i quants;	
-	__m128 quant_lo, quant_hi;
 	
 	__m256 result, dct_values, quant_values;
 	__m256 factor = _mm256_set1_ps(0.25f);
 	
 	for (zigzag = 0; zigzag < 64; zigzag += 8)
-	{	
+	{
 		// Set the dct_values for the current interation
 		dct_values = _mm256_set_ps(in_data[UV_indexes[zigzag+7]], in_data[UV_indexes[zigzag+6]],
 		in_data[UV_indexes[zigzag+5]], in_data[UV_indexes[zigzag+4]], in_data[UV_indexes[zigzag+3]],
 		in_data[UV_indexes[zigzag+2]], in_data[UV_indexes[zigzag+1]], in_data[UV_indexes[zigzag]]);
-		
+
 		// Multiply with 0.25 to divide by 4.0
 		result = _mm256_mul_ps(dct_values, factor);
-		
-		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
-		 * and convert them to floating-point values */
-		quants = _mm_loadl_epi64((__m128i*) &quant_tbl[zigzag]);
-		quant_lo = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
-		quant_hi = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
-		
-		// Combine the two 128-bit registers containing quant-values and multiply with previous product
-		quant_values = _mm256_insertf128_ps(_mm256_castps128_ps256(quant_lo), quant_hi, 0b00000001);
+
+		// Load quant-values and multiply with previous product
+		quant_values = _mm256_load_ps(quant_tbl + zigzag);
 		result = _mm256_div_ps(result, quant_values);
 
 		// Round off values and store in out_data buffer
@@ -234,15 +225,12 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 }
 			
 static void dequantize_block(float *in_data, float *out_data,
-    uint8_t *quant_tbl)
+    float *quant_tbl)
 {
 	int zigzag;
 	
 	// Temporary buffer
 	float temp_buf[8] __attribute__((aligned(32)));
-	
-	__m128i quants;	
-	__m128 quant_lo, quant_hi;
 	
 	__m256 result, dct_values, quant_values;
 	__m256 factor = _mm256_set1_ps(0.25f);
@@ -251,16 +239,8 @@ static void dequantize_block(float *in_data, float *out_data,
 	{		
 		// Load dct-values
 		dct_values = _mm256_load_ps(in_data+zigzag);
-		
-		/* Load values from quant_tbl, extract the eight first values as 32-bit integers
-		 * and convert them to floating-point values */
-		quants = _mm_loadl_epi64((__m128i*) &quant_tbl[zigzag]);
-		quant_lo = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(quants));
-		quant_hi = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_shuffle_epi32(quants, 0b00000001)));
-		
-		/* Combine the two 128-bit registers containing quant-values 
-		 * and multiply with the register containing dct-values */
-		quant_values = _mm256_insertf128_ps(_mm256_castps128_ps256(quant_lo), quant_hi, 0b00000001);
+
+		quant_values = _mm256_load_ps(quant_tbl + zigzag);
 		result = _mm256_mul_ps(dct_values, quant_values);
 		
 		// Multiply with 0.25 to divide by 4.0
@@ -284,7 +264,7 @@ static void dequantize_block(float *in_data, float *out_data,
 
 
 void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-    uint8_t *quant_tbl)
+    float *quant_tbl)
 {
   float mb[8*8] __attribute((aligned(32)));
   float mb2[8*8] __attribute((aligned(32)));
@@ -320,7 +300,7 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
 }
 
 void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
-    uint8_t *quant_tbl)
+    float *quant_tbl)
 {
   float mb[8*8] __attribute((aligned(32)));
   float mb2[8*8] __attribute((aligned(32)));
