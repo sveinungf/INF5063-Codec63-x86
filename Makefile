@@ -1,47 +1,75 @@
 CC = gcc
-CFLAGS = -march=native -O3 -Wall -DSHOW_CYCLES -g -pg
+
+DEBUG ?= 0
+
+VIDEO ?= 0
+
+CCFLAGS = -Wall -march=native
 LDFLAGS = -lm
 
-all: c63enc c63pred #c63dec
+ifeq ($(DEBUG),1)
+	CCFLAGS += -Og -g -pg
+else
+	CCFLAGS += -O3
+endif
+
+ifeq ($(VIDEO),0)
+	WIDTH = 352
+	HEIGHT = 288
+	INPUT_VIDEO = /opt/cipr/foreman.yuv
+	REFERENCE_VIDEO = ~/yuv/reference/foreman.yuv
+else ifeq ($(VIDEO),1)
+	WIDTH = 3840
+	HEIGHT = 2160
+	INPUT_VIDEO = /opt/cipr/foreman_4k.yuv
+	REFERENCE_VIDEO = ~/yuv/reference/foreman_4k.yuv
+else ifeq ($(VIDEO),2)
+	WIDTH = 1920
+	HEIGHT = 1080
+	INPUT_VIDEO = /opt/cipr/tractor.yuv
+	REFERENCE_VIDEO = ~/yuv/reference/tractor.yuv
+else ifeq ($(VIDEO),3)
+	WIDTH = 4096
+	HEIGHT = 1680
+	INPUT_VIDEO = /opt/cipr/bagadus.yuv
+endif
+
+C63_FILE = temp/test.c63
+OUTPUT_VIDEO = temp/output.yuv
+
+all: c63enc
 
 %.o: %.c
-	$(CC) $< $(CFLAGS) -c -o $@
+	$(CC) $(CCFLAGS) -c $< -o $@
 
-c63enc: c63enc.o dsp.o tables.o io.o c63_write.o c63.h common.o me.o
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
-c63dec: c63dec.c dsp.o tables.o io.o c63.h common.o me.o
-	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
-c63pred: c63dec.c dsp.o tables.o io.o c63.h common.o me.o
-	$(CC) $^ -DC63_PRED $(CFLAGS) $(LDFLAGS) -o $@
+ALL_OBJECTS = c63_write.o c63enc.o common.o dsp.o io.o me.o tables.o
+
+c63enc: $(ALL_OBJECTS)
+	$(CC) $^ $(CCFLAGS) $(LDFLAGS) -o $@
 
 clean:
-	rm -f *.o c63enc temp/* yuv/test.yuv c63pred #c63dec
+	rm -f c63enc $(ALL_OBJECTS) temp/*
 
 encode: c63enc
-	./c63enc -w 352 -h 288 -o temp/test.c63 yuv/foreman.yuv
+	./c63enc -w $(WIDTH) -h $(HEIGHT) -o $(C63_FILE) $(INPUT_VIDEO)
 decode:
-	./c63dec temp/test.c63 yuv/test.yuv
+	./c63dec $(C63_FILE) $(OUTPUT_VIDEO)
 
 vlc:
-	vlc --rawvid-width 352 --rawvid-height 288 --rawvid-chroma I420 yuv/test.yuv
-vlc-original:
-	vlc --rawvid-width 352 --rawvid-height 288 --rawvid-chroma I420 yuv/foreman.yuv
-vlc-reference:
-	vlc --rawvid-width 352 --rawvid-height 288 --rawvid-chroma I420 yuv/reference.yuv
+	vlc --rawvid-width $(WIDTH) --rawvid-height $(HEIGHT) --rawvid-chroma I420 $(OUTPUT_VIDEO)
 
 gprof:
 	gprof c63enc gmon.out -b
-gprof-file:
-	gprof c63enc gmon.out > temp/gprof-result.txt
 
+PSNR_EXEC = ./tools/yuv-tools/ycbcr.py psnr
 psnr:
-	./tools/yuv-tools/ycbcr.py psnr yuv/foreman.yuv 352 288 IYUV yuv/test.yuv
+	$(PSNR_EXEC) $(INPUT_VIDEO) $(WIDTH) $(HEIGHT) IYUV $(OUTPUT_VIDEO)
 psnr-reference:
-	./tools/yuv-tools/ycbcr.py psnr yuv/foreman.yuv 352 288 IYUV yuv/reference.yuv
+	$(PSNR_EXEC) $(INPUT_VIDEO) $(WIDTH) $(HEIGHT) IYUV $(REFERENCE_VIDEO)
 psnr-diff:
-	./tools/yuv-tools/ycbcr.py psnr yuv/reference.yuv 352 288 IYUV yuv/test.yuv
+	$(PSNR_EXEC) $(REFERENCE_VIDEO) $(WIDTH) $(HEIGHT) IYUV $(OUTPUT_VIDEO)
 	
 cachegrind:
-	valgrind --tool=cachegrind --branch-sim=yes --cachegrind-out-file=temp/cachegrind.out ./c63enc -w 352 -h 288 -f 30 -o temp/test.c63 yuv/foreman.yuv
+	valgrind --tool=cachegrind --branch-sim=yes --cachegrind-out-file=temp/cachegrind.out ./c63enc -w $(WIDTH) -h $(HEIGHT) -o $(C63_FILE) $(INPUT_VIDEO)
 
 test: encode gprof
