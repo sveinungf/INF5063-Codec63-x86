@@ -109,7 +109,7 @@ struct c63_common
   //int me_search_range;	// This is now defined in c63.h
 
   uint8_t quanttbl[COLOR_COMPONENTS][64];
-  float quanttbl_fp[COLOR_COMPONENTS][64] __attribute__ ((aligned(32)));
+  float quanttbl_fp[COLOR_COMPONENTS][64];
 
   struct frame *refframe;
   struct frame *curframe;

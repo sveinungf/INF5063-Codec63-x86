@@ -186,6 +186,7 @@ struct c63_common* init_c63_enc(int width, int height)
     cm->quanttbl[Y][i] = yquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[U][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[V][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
+
     cm->quanttbl_fp[Y_COMPONENT][i] = (uint8_t) (yquanttbl_def[i] / (cm->qp / 10.0));
     cm->quanttbl_fp[U_COMPONENT][i] = (uint8_t) (uvquanttbl_def[i] / (cm->qp / 10.0));
     cm->quanttbl_fp[V_COMPONENT][i] = (uint8_t) (uvquanttbl_def[i] / (cm->qp / 10.0));
