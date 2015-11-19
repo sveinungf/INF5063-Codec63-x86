@@ -22,6 +22,10 @@ static int limit_numframes = 0;
 static uint32_t width;
 static uint32_t height;
 
+static const int Y = Y_COMPONENT;
+static const int U = U_COMPONENT;
+static const int V = V_COMPONENT;
+
 /* getopt */
 extern int optind;
 extern char *optarg;
@@ -104,10 +108,14 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   if (!cm->curframe->keyframe)
   {
     /* Motion Estimation */
-    c63_motion_estimate(cm);
+    c63_motion_estimate(cm, Y_COMPONENT);
+    c63_motion_estimate(cm, U_COMPONENT);
+    c63_motion_estimate(cm, V_COMPONENT);
 
     /* Motion Compensation */
-    c63_motion_compensate(cm);
+    c63_motion_compensate(cm, Y_COMPONENT);
+    c63_motion_compensate(cm, U_COMPONENT);
+    c63_motion_compensate(cm, V_COMPONENT);
   }
 
   /* DCT and Quantization */
@@ -150,26 +158,32 @@ struct c63_common* init_c63_enc(int width, int height)
   cm->width = width;
   cm->height = height;
 
-  cm->padw[Y_COMPONENT] = cm->ypw = (uint32_t)(ceil(width/16.0f)*16);
-  cm->padh[Y_COMPONENT] = cm->yph = (uint32_t)(ceil(height/16.0f)*16);
-  cm->padw[U_COMPONENT] = cm->upw = (uint32_t)(ceil(width*UX/(YX*8.0f))*8);
-  cm->padh[U_COMPONENT] = cm->uph = (uint32_t)(ceil(height*UY/(YY*8.0f))*8);
-  cm->padw[V_COMPONENT] = cm->vpw = (uint32_t)(ceil(width*VX/(YX*8.0f))*8);
-  cm->padh[V_COMPONENT] = cm->vph = (uint32_t)(ceil(height*VY/(YY*8.0f))*8);
+  cm->padw[Y] = cm->ypw = (uint32_t)(ceil(width/16.0f)*16);
+  cm->padh[Y] = cm->yph = (uint32_t)(ceil(height/16.0f)*16);
+  cm->padw[U] = cm->upw = (uint32_t)(ceil(width*UX/(YX*8.0f))*8);
+  cm->padh[U] = cm->uph = (uint32_t)(ceil(height*UY/(YY*8.0f))*8);
+  cm->padw[V] = cm->vpw = (uint32_t)(ceil(width*VX/(YX*8.0f))*8);
+  cm->padh[V] = cm->vph = (uint32_t)(ceil(height*VY/(YY*8.0f))*8);
 
-  cm->mb_cols = cm->ypw / 8;
-  cm->mb_rows = cm->yph / 8;
+  cm->mb_cols[Y] = cm->ypw / 8;
+  cm->mb_cols[U] = cm->mb_cols[Y] / 2;
+  cm->mb_cols[V] = cm->mb_cols[U];
+
+  cm->mb_rows[Y] = cm->yph / 8;
+  cm->mb_rows[U] = cm->mb_rows[Y] / 2;
+  cm->mb_rows[V] = cm->mb_rows[U];
 
   /* Quality parameters -- Home exam deliveries should have original values,
    i.e., quantization factor should be 25, search range should be 16, and the
    keyframe interval should be 100. */
   cm->qp = 25;                  // Constant quantization factor. Range: [1..50]
-  cm->me_search_range = 16;     // Pixels in every direction
+  //cm->me_search_range = 16;   // This is now defined in c63.h
   cm->keyframe_interval = 100;  // Distance between keyframes
 
   /* Initialize quantization tables */
   for (i = 0; i < 64; ++i)
   {
+
     cm->quanttbl[Y_COMPONENT][i] = yquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[U_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
     cm->quanttbl[V_COMPONENT][i] = uvquanttbl_def[i] / (cm->qp / 10.0);

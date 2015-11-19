@@ -1,12 +1,19 @@
 # object files
 c63enc
-c63dec
-c63pred
 *.o
 
-# data files
 *.c63
-/gmon.out
+*.pyc
+gmon.out
 
+<<<<<<< HEAD
 *.pyc
 /.ptp-sync/
+=======
+# eclipse
+.ptp-sync/
+.settings/
+.cproject
+.project
+.ptp-sync-folder
+>>>>>>> branch 'master' of https://github.com/ikoddn/INF5063-Codec63-x86.git
