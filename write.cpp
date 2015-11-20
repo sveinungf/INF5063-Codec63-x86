@@ -8,9 +8,12 @@
 #include <string.h>
 
 #include "c63.h"
-#include "c63_write.h"
+#include "write.h"
+
+extern "C" {
 #include "io.h"
 #include "tables.h"
+}
 
 int frequencies[2][12];
 

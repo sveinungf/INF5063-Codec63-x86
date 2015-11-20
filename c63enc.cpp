@@ -9,9 +9,9 @@
 #include <string.h>
 
 #include "c63.h"
+#include "write.h"
 
 extern "C" {
-#include "c63_write.h"
 #include "common.h"
 #include "dsp.h"
 #include "me.h"
