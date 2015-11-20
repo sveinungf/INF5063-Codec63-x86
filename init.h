@@ -1,14 +1,16 @@
-#ifndef C63_COMMON_H_
-#define C63_COMMON_H_
+#ifndef C63_INIT_H_
+#define C63_INIT_H_
 
 #include <inttypes.h>
 
 #include "c63.h"
 
-struct frame* create_frame(struct c63_common *cm, yuv_t *image);
+yuv_t* create_image(struct c63_common* cm);
+void destroy_image(yuv_t* image);
 
+struct frame* create_frame(struct c63_common *cm, yuv_t *image);
 void destroy_frame(struct frame *f);
 
 void dump_image(yuv_t *image, int w, int h, FILE *fp);
 
-#endif  /* C63_COMMON_H_ */
+#endif  /* C63_INIT_H_ */

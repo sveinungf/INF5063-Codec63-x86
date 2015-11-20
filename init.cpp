@@ -17,6 +17,25 @@ static const int Y = Y_COMPONENT;
 static const int U = U_COMPONENT;
 static const int V = V_COMPONENT;
 
+yuv_t* create_image(struct c63_common* cm)
+{
+	yuv_t* image = (yuv_t*) malloc(sizeof(yuv_t));
+
+	image->Y = (uint8_t*) malloc(cm->padw[Y] * cm->padh[Y] * sizeof(uint8_t));
+	image->U = (uint8_t*) malloc(cm->padw[U] * cm->padh[U] * sizeof(uint8_t));
+	image->V = (uint8_t*) malloc(cm->padw[V] * cm->padh[V] * sizeof(uint8_t));
+
+	return image;
+}
+
+void destroy_image(yuv_t* image)
+{
+	free(image->Y);
+	free(image->U);
+	free(image->V);
+	free(image);
+}
+
 void destroy_frame(struct frame *f)
 {
 	/* First frame doesn't have a reconstructed frame to destroy */
