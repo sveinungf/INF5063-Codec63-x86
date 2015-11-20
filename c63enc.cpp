@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
 
 #include "c63.h"
 #include "write.h"
@@ -17,6 +18,8 @@ extern "C" {
 #include "me.h"
 #include "tables.h"
 }
+
+using namespace std;
 
 static char *output_file, *input_file;
 FILE *outfile;
@@ -146,11 +149,6 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 
 	/* Function dump_image(), found in common.c, can be used here to check if the
 	 prediction is correct */
-
-	write_frame(cm);
-
-	++cm->framenum;
-	++cm->frames_since_keyframe;
 }
 
 struct c63_common* init_c63_enc(int width, int height)
@@ -306,6 +304,13 @@ int main(int argc, char **argv)
 # else
 		c63_encode_image(cm, image);
 # endif
+
+		vector<uint8_t> byte_vector;
+		write_frame_to_buffer(cm, byte_vector);
+		write_buffer_to_file(byte_vector, outfile);
+
+		++cm->framenum;
+		++cm->frames_since_keyframe;
 
 		free(image->Y);
 		free(image->U);
