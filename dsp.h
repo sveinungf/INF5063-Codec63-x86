@@ -1,14 +1,14 @@
-#ifndef C63_DSP_H_
-#define C63_DSP_H_
-
-#define ISQRT2 0.70710678118654f
+#ifndef C63_DSP_SIMD_H_
+#define C63_DSP_SIMD_H_
 
 #include <inttypes.h>
 
-void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-    float *quant_tbl);
+#define ISQRT2 0.70710678118654f
 
-void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
-    float *quant_tbl);
+void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
+		int16_t *out_data, uint8_t *quantization);
 
-#endif  /* C63_DSP_H_ */
+void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
+		uint8_t *out_data, uint8_t *quantization);
+
+#endif  /* C63_DSP_SIMD_H_ */
