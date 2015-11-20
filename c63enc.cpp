@@ -29,6 +29,10 @@ static int limit_numframes = 0;
 static uint32_t width;
 static uint32_t height;
 
+static const int Y = Y_COMPONENT;
+static const int U = U_COMPONENT;
+static const int V = V_COMPONENT;
+
 /* getopt */
 extern int optind;
 extern char *optarg;
@@ -80,10 +84,10 @@ static bool read_yuv(FILE *file, yuv_t* image)
 
 static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 {
-	/* Advance to next frame */
-	destroy_frame(cm->refframe);
-	cm->refframe = cm->curframe;
-	cm->curframe = create_frame(cm, image);
+	// Advance to next frame by swapping current and reference frame
+	std::swap(cm->curframe, cm->refframe);
+
+	cm->curframe->orig = image;
 
 	/* Check if keyframe */
 	if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
@@ -109,6 +113,16 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 		c63_motion_compensate(cm, Y_COMPONENT);
 		c63_motion_compensate(cm, U_COMPONENT);
 		c63_motion_compensate(cm, V_COMPONENT);
+	}
+	else
+	{
+		// dct_quantize() expects zeroed out prediction buffers for key frames.
+		// We zero them out here since we reuse the buffers from previous frames.
+		yuv_t* predicted = cm->curframe->predicted;
+
+		memset(predicted->Y, 0, cm->padw[Y] * cm->padh[Y] * sizeof(uint8_t));
+		memset(predicted->U, 0, cm->padw[U] * cm->padh[U] * sizeof(uint8_t));
+		memset(predicted->V, 0, cm->padw[V] * cm->padh[V] * sizeof(uint8_t));
 	}
 
 	/* DCT and Quantization */
@@ -263,6 +277,7 @@ int main(int argc, char **argv)
 # endif
 
 	destroy_image(image);
+	cleanup_c63_common(cm);
 
 	fclose(outfile);
 	fclose(infile);
