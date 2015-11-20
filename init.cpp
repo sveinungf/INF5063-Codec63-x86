@@ -7,9 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common.h"
-#include "dsp.h"
+#include "init.h"
 
+extern "C" {
+#include "dsp.h"
+}
 
 static const int Y = Y_COMPONENT;
 static const int U = U_COMPONENT;
@@ -44,30 +46,30 @@ void destroy_frame(struct frame *f)
 
 struct frame* create_frame(struct c63_common *cm, yuv_t *image)
 {
-  struct frame *f = malloc(sizeof(struct frame));
+  struct frame *f = (struct frame*) malloc(sizeof(struct frame));
 
   f->orig = image;
 
-  f->recons = malloc(sizeof(yuv_t));
-  f->recons->Y = malloc(cm->ypw * cm->yph);
-  f->recons->U = malloc(cm->upw * cm->uph);
-  f->recons->V = malloc(cm->vpw * cm->vph);
+  f->recons = (yuv_t*) malloc(sizeof(yuv_t));
+  f->recons->Y = (uint8_t*) malloc(cm->ypw * cm->yph);
+  f->recons->U = (uint8_t*) malloc(cm->upw * cm->uph);
+  f->recons->V = (uint8_t*) malloc(cm->vpw * cm->vph);
 
-  f->predicted = malloc(sizeof(yuv_t));
-  f->predicted->Y = calloc(cm->ypw * cm->yph, sizeof(uint8_t));
-  f->predicted->U = calloc(cm->upw * cm->uph, sizeof(uint8_t));
-  f->predicted->V = calloc(cm->vpw * cm->vph, sizeof(uint8_t));
+  f->predicted = (yuv_t*) malloc(sizeof(yuv_t));
+  f->predicted->Y = (uint8_t*) calloc(cm->ypw * cm->yph, sizeof(uint8_t));
+  f->predicted->U = (uint8_t*) calloc(cm->upw * cm->uph, sizeof(uint8_t));
+  f->predicted->V = (uint8_t*) calloc(cm->vpw * cm->vph, sizeof(uint8_t));
 
-  f->residuals = malloc(sizeof(dct_t));
-  f->residuals->Ydct = calloc(cm->ypw * cm->yph, sizeof(int16_t));
-  f->residuals->Udct = calloc(cm->upw * cm->uph, sizeof(int16_t));
-  f->residuals->Vdct = calloc(cm->vpw * cm->vph, sizeof(int16_t));
+  f->residuals = (dct_t*) malloc(sizeof(dct_t));
+  f->residuals->Ydct = (int16_t*) calloc(cm->ypw * cm->yph, sizeof(int16_t));
+  f->residuals->Udct = (int16_t*) calloc(cm->upw * cm->uph, sizeof(int16_t));
+  f->residuals->Vdct = (int16_t*) calloc(cm->vpw * cm->vph, sizeof(int16_t));
 
-  f->mbs[Y_COMPONENT] =
+  f->mbs[Y_COMPONENT] = (struct macroblock*)
     calloc(cm->mb_rows[Y] * cm->mb_cols[Y], sizeof(struct macroblock));
-  f->mbs[U_COMPONENT] =
+  f->mbs[U_COMPONENT] = (struct macroblock*)
     calloc(cm->mb_rows[U] * cm->mb_cols[U], sizeof(struct macroblock));
-  f->mbs[V_COMPONENT] =
+  f->mbs[V_COMPONENT] = (struct macroblock*)
     calloc(cm->mb_rows[V] * cm->mb_cols[V], sizeof(struct macroblock));
 
   return f;

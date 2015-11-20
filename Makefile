@@ -48,7 +48,7 @@ all: c63enc
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-ALL_OBJECTS = c63enc.o common.o dsp.o me.o tables.o write.o
+ALL_OBJECTS = c63enc.o dsp.o init.o me.o tables.o write.o
 
 c63enc: $(ALL_OBJECTS)
 	$(CXX) $^ $(CXXFLAGS) $(LDFLAGS) -o $@

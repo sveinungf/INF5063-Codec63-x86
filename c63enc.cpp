@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "c63.h"
+#include "init.h"
 #include "write.h"
 
 extern "C" {
-#include "common.h"
 #include "dsp.h"
 #include "me.h"
 #include "tables.h"
