@@ -1,3 +1,4 @@
+#include <immintrin.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdlib.h>
@@ -6,8 +7,6 @@
 
 #include "dsp.h"
 #include "tables.h"
-
-#include <immintrin.h>
 
 static void transpose_block(float *in_data, float *out_data)
 {
@@ -261,7 +260,7 @@ static void dequantize_block(float *in_data, float *out_data, float *quant_tbl)
 	}
 }
 
-void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, float *quant_tbl)
+static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, float *quant_tbl)
 {
 	float mb[8 * 8] __attribute((aligned(32)));
 	float mb2[8 * 8] __attribute((aligned(32)));
@@ -296,7 +295,7 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, float *quant_tbl)
 	}
 }
 
-void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, float *quant_tbl)
+static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, float *quant_tbl)
 {
 	float mb[8 * 8] __attribute((aligned(32)));
 	float mb2[8 * 8] __attribute((aligned(32)));
@@ -329,5 +328,91 @@ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, float *quant_tb
 	for (i = 0; i < 64; ++i)
 	{
 		out_data[i] = mb[i];
+	}
+}
+
+static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, uint8_t *out_data,
+		float *quantization)
+{
+	int x;
+
+	int16_t block[8 * 8];
+
+	/* Perform the dequantization and iDCT */
+	for (x = 0; x < w; x += 8)
+	{
+		int i, j;
+
+		dequant_idct_block_8x8(in_data + (x * 8), block, quantization);
+
+		for (i = 0; i < 8; ++i)
+		{
+			for (j = 0; j < 8; ++j)
+			{
+				/* Add prediction block. Note: DCT is not precise -
+				 Clamp to legal values */
+				int16_t tmp = block[i * 8 + j] + (int16_t) prediction[i * w + j + x];
+
+				if (tmp < 0)
+				{
+					tmp = 0;
+				}
+				else if (tmp > 255)
+				{
+					tmp = 255;
+				}
+
+				out_data[i * w + j + x] = tmp;
+			}
+		}
+	}
+}
+
+static void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int16_t *out_data,
+		float *quantization)
+{
+	int x;
+
+	int16_t block[8 * 8];
+
+	/* Perform the DCT and quantization */
+	for (x = 0; x < w; x += 8)
+	{
+		int i, j;
+
+		for (i = 0; i < 8; ++i)
+		{
+			for (j = 0; j < 8; ++j)
+			{
+				block[i * 8 + j] = ((int16_t) in_data[i * w + j + x] - prediction[i * w + j + x]);
+			}
+		}
+
+		/* Store MBs linear in memory, i.e. the 64 coefficients are stored
+		 continous. This allows us to ignore stride in DCT/iDCT and other
+		 functions. */
+		dct_quant_block_8x8(block, out_data + (x * 8), quantization);
+	}
+}
+
+void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
+		uint8_t *out_data, float *quantization)
+{
+	unsigned int y;
+	for (y = 0; y < height; y += 8)
+	{
+		dequantize_idct_row(in_data + y * width, prediction + y * width, width,
+				out_data + y * width, quantization);
+	}
+}
+
+void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height,
+		int16_t *out_data, float *quantization)
+{
+	unsigned int y;
+	for (y = 0; y < height; y += 8)
+	{
+		dct_quantize_row(in_data + y * width, prediction + y * width, width, out_data + y * width,
+				quantization);
 	}
 }
