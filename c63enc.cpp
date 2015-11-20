@@ -258,7 +258,6 @@ int main(int argc, char **argv)
 	}
 
 	struct c63_common *cm = init_c63_enc(width, height);
-	cm->e_ctx.fp = outfile;
 
 	input_file = argv[optind];
 

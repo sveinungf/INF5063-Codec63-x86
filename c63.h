@@ -68,13 +68,6 @@ struct dct
 typedef struct yuv yuv_t;
 typedef struct dct dct_t;
 
-struct entropy_ctx
-{
-  FILE *fp;
-  unsigned int bit_buffer;
-  unsigned int bit_buffer_width;
-};
-
 struct macroblock
 {
   int use_mv;
@@ -118,8 +111,6 @@ struct c63_common
 
   int keyframe_interval;
   int frames_since_keyframe;
-
-  struct entropy_ctx e_ctx;
 };
 
 #endif  /* C63_C63_H_ */
