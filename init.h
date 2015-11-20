@@ -13,4 +13,6 @@ void destroy_frame(struct frame *f);
 
 void dump_image(yuv_t *image, int w, int h, FILE *fp);
 
+struct c63_common* init_c63_common(int width, int height);
+
 #endif  /* C63_INIT_H_ */
