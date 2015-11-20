@@ -5,7 +5,7 @@ DEBUG ?= 0
 
 VIDEO ?= 0
 
-CCFLAGS = -Wall -march=native
+CCFLAGS = -Wall -Wextra -march=native
 CXXFLAGS = -std=c++11
 LDFLAGS = -lm
 
