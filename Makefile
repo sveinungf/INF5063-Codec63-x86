@@ -1,10 +1,12 @@
 CC = gcc
+CXX = g++
 
 DEBUG ?= 0
 
 VIDEO ?= 0
 
 CCFLAGS = -Wall -march=native
+CXXFLAGS = -std=c++11
 LDFLAGS = -lm
 
 ifeq ($(DEBUG),1)
@@ -12,6 +14,8 @@ ifeq ($(DEBUG),1)
 else
 	CCFLAGS += -O3
 endif
+
+CXXFLAGS += $(CCFLAGS)
 
 ifeq ($(VIDEO),0)
 	WIDTH = 352
@@ -41,11 +45,13 @@ all: c63enc
 
 %.o: %.c
 	$(CC) $(CCFLAGS) -c $< -o $@
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 ALL_OBJECTS = c63_write.o c63enc.o common.o dsp.o io.o me.o tables.o
 
 c63enc: $(ALL_OBJECTS)
-	$(CC) $^ $(CCFLAGS) $(LDFLAGS) -o $@
+	$(CXX) $^ $(CXXFLAGS) $(LDFLAGS) -o $@
 
 clean:
 	rm -f c63enc $(ALL_OBJECTS) temp/*
