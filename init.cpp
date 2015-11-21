@@ -41,26 +41,19 @@ static struct frame* create_frame(struct c63_common *cm)
 {
 	struct frame *f = (struct frame*) malloc(sizeof(struct frame));
 
-	f->recons = (yuv_t*) malloc(sizeof(yuv_t));
-	f->recons->Y = (uint8_t*) malloc(cm->ypw * cm->yph);
-	f->recons->U = (uint8_t*) malloc(cm->upw * cm->uph);
-	f->recons->V = (uint8_t*) malloc(cm->vpw * cm->vph);
-
-	f->predicted = (yuv_t*) malloc(sizeof(yuv_t));
-	f->predicted->Y = (uint8_t*) calloc(cm->ypw * cm->yph, sizeof(uint8_t));
-	f->predicted->U = (uint8_t*) calloc(cm->upw * cm->uph, sizeof(uint8_t));
-	f->predicted->V = (uint8_t*) calloc(cm->vpw * cm->vph, sizeof(uint8_t));
+	f->recons = create_image(cm);
+	f->predicted = create_image(cm);
 
 	f->residuals = (dct_t*) malloc(sizeof(dct_t));
-	f->residuals->Ydct = (int16_t*) calloc(cm->ypw * cm->yph, sizeof(int16_t));
-	f->residuals->Udct = (int16_t*) calloc(cm->upw * cm->uph, sizeof(int16_t));
-	f->residuals->Vdct = (int16_t*) calloc(cm->vpw * cm->vph, sizeof(int16_t));
+	f->residuals->Ydct = (int16_t*) malloc(cm->ypw * cm->yph * sizeof(int16_t));
+	f->residuals->Udct = (int16_t*) malloc(cm->upw * cm->uph * sizeof(int16_t));
+	f->residuals->Vdct = (int16_t*) malloc(cm->vpw * cm->vph * sizeof(int16_t));
 
-	f->mbs[Y_COMPONENT] = (struct macroblock*) calloc(cm->mb_rows[Y] * cm->mb_cols[Y],
+	f->mbs[Y] = (struct macroblock*) calloc(cm->mb_rows[Y] * cm->mb_cols[Y],
 			sizeof(struct macroblock));
-	f->mbs[U_COMPONENT] = (struct macroblock*) calloc(cm->mb_rows[U] * cm->mb_cols[U],
+	f->mbs[U] = (struct macroblock*) calloc(cm->mb_rows[U] * cm->mb_cols[U],
 			sizeof(struct macroblock));
-	f->mbs[V_COMPONENT] = (struct macroblock*) calloc(cm->mb_rows[V] * cm->mb_cols[V],
+	f->mbs[V] = (struct macroblock*) calloc(cm->mb_rows[V] * cm->mb_cols[V],
 			sizeof(struct macroblock));
 
 	return f;
@@ -68,30 +61,17 @@ static struct frame* create_frame(struct c63_common *cm)
 
 static void destroy_frame(struct frame *f)
 {
-	/* First frame doesn't have a reconstructed frame to destroy */
-	if (!f)
-	{
-		return;
-	}
-
-	free(f->recons->Y);
-	free(f->recons->U);
-	free(f->recons->V);
-	free(f->recons);
+	destroy_image(f->recons);
+	destroy_image(f->predicted);
 
 	free(f->residuals->Ydct);
 	free(f->residuals->Udct);
 	free(f->residuals->Vdct);
 	free(f->residuals);
 
-	free(f->predicted->Y);
-	free(f->predicted->U);
-	free(f->predicted->V);
-	free(f->predicted);
-
-	free(f->mbs[Y_COMPONENT]);
-	free(f->mbs[U_COMPONENT]);
-	free(f->mbs[V_COMPONENT]);
+	free(f->mbs[Y]);
+	free(f->mbs[U]);
+	free(f->mbs[V]);
 
 	free(f);
 }
@@ -142,9 +122,9 @@ struct c63_common* init_c63_common(int width, int height)
 		cm->quanttbl[U][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
 		cm->quanttbl[V][i] = uvquanttbl_def[i] / (cm->qp / 10.0);
 
-		cm->quanttbl_fp[Y_COMPONENT][i] = (uint8_t) (yquanttbl_def[i] / (cm->qp / 10.0));
-		cm->quanttbl_fp[U_COMPONENT][i] = (uint8_t) (uvquanttbl_def[i] / (cm->qp / 10.0));
-		cm->quanttbl_fp[V_COMPONENT][i] = (uint8_t) (uvquanttbl_def[i] / (cm->qp / 10.0));
+		cm->quanttbl_fp[Y][i] = (uint8_t) (yquanttbl_def[i] / (cm->qp / 10.0));
+		cm->quanttbl_fp[U][i] = (uint8_t) (uvquanttbl_def[i] / (cm->qp / 10.0));
+		cm->quanttbl_fp[V][i] = (uint8_t) (uvquanttbl_def[i] / (cm->qp / 10.0));
 	}
 
 	cm->curframe = create_frame(cm);
